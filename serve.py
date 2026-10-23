@@ -70,6 +70,7 @@ STATE = {"phase": "idle", "step": 0, "of": 0, "thought": "", "action": "",
          "component": "", "ts": 0.0}
 _ACT = {"in_think": False, "buf": []}
 _ACT_LOCK = threading.Lock()
+LAST_RESULT = {"ok": None, "msg": "", "ts": 0.0}   # 对话模式要知上一单做到未
 
 
 def _pub(q, phase: str, **kw) -> None:
@@ -178,12 +179,29 @@ def classify(text: str) -> dict:
     return {"mode": "chat", "why": "无动作词", "task": 0, "chat": 0}
 
 
+def chat_context() -> str:
+    """对话模式嘅事实底：设备 + 当前状态 + 上一单结果（唔加截图，慳钱）。"""
+    st = dict(STATE)
+    phase = {"chat": "对话中", "idle": "空闲", "step": "执行中", "think": "模型谂紧",
+             "act": "执行中", "turn": "派发中", "done": "做完", "human": "等人处理"}.get(st.get("phase"), st.get("phase") or "空闲")
+    bits = [f"设备：{TARGET}（在线）",
+            f"当前状态：{phase}",
+            f"步数：{st.get('step', 0)}/{st.get('of', 0) or STEPS}"]
+    if LAST_RESULT["ts"]:
+        age = int(time.time() - LAST_RESULT["ts"])
+        bits.append(f"上一单任务：{'成功' if LAST_RESULT['ok'] else '未做到'} · {LAST_RESULT['msg'][:120]}（{age} 秒前）")
+    if st.get("action"):
+        bits.append(f"最后一个动作：{st['action'][:80]}")
+    return "；".join(bits)
+
+
 def answer_chat(text: str, timeout: float = 40.0) -> str:
-    """直接问模型（唔经 Mobilerun、唔睇屏）。"""
+    """直接问模型（唔经 Mobilerun、唔睇屏），但带设备与任务上下文。"""
     import urllib.request
     provider, base, key = llm_route()
+    sysmsg = SYS_CHAT + "\n\n已知事实（只可引用，唔准编）：" + chat_context()
     payload = {"model": MODEL, "temperature": 0.5, "max_tokens": 600,
-               "messages": [{"role": "system", "content": SYS_CHAT},
+               "messages": [{"role": "system", "content": sysmsg},
                             {"role": "user", "content": text}]}
     req = urllib.request.Request(
         base.rstrip("/") + "/chat/completions",
@@ -315,6 +333,7 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
             tid = latest_trajectory(started)
         if tid:
             q.put(("trajectory", {"id": tid}))
+        LAST_RESULT.update(ok=bool(success), msg=message or "", ts=time.time())
         if success:
             _pub(q, "done", action="")
             q.put(("result", {"success": True, "message": message or "做完"}))
