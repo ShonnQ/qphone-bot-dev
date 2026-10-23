@@ -35,6 +35,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -72,6 +73,30 @@ _ACT = {"in_think": False, "buf": []}
 _ACT_LOCK = threading.Lock()
 LAST_RESULT = {"ok": None, "msg": "", "ts": 0.0}   # 对话模式要知上一单做到未
 
+# ---- 会话历史（刷新 / 断线都唔会消失）----
+HISTORY: list[dict] = []
+HIST_LOCK = threading.Lock()
+CURRENT_TASK = {"id": ""}
+
+
+def hist_add(kind: str, **kw) -> dict:
+    with HIST_LOCK:
+        item = {"kind": kind, "ts": time.time(), **kw}
+        HISTORY.append(item)
+        del HISTORY[:-300]
+        return item
+
+
+def hist_task_update(tid: str, **kw):
+    if not tid:
+        return None
+    with HIST_LOCK:
+        for it in reversed(HISTORY):
+            if it.get("id") == tid:
+                it.update(kw)
+                return it
+    return None
+
 
 def _pub(q, phase: str, **kw) -> None:
     with _ACT_LOCK:
@@ -82,6 +107,10 @@ def _pub(q, phase: str, **kw) -> None:
         STATE.clear()
         STATE.update(st)
         snap = dict(st)
+    if CURRENT_TASK["id"] and phase in ("step", "think", "act", "done", "human"):
+        hist_task_update(CURRENT_TASK["id"], phase="running" if phase in ("step", "think", "act") else phase,
+                         step=snap.get("step") or 0, of=snap.get("of") or 0,
+                         detail=(snap.get("action") or snap.get("thought") or "")[:120])
     if q is not None:
         try:
             q.put(("activity", snap))
@@ -334,6 +363,8 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
         if tid:
             q.put(("trajectory", {"id": tid}))
         LAST_RESULT.update(ok=bool(success), msg=message or "", ts=time.time())
+        hist_task_update(CURRENT_TASK["id"], phase="done" if success else "human",
+                         msg=(message or "")[:300])
         if success:
             _pub(q, "done", action="")
             q.put(("result", {"success": True, "message": message or "做完"}))
@@ -825,6 +856,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/state":
             return self._send_json(dict(STATE))
+        if path == "/history":
+            with HIST_LOCK:
+                items = [dict(x) for x in HISTORY]
+            return self._send_json({"items": items, "state": dict(STATE),
+                                    "model": MODEL, "of": int(STEPS)})
         if path == "/health":
             return self._send_json({"ok": True, "target": TARGET, "model": MODEL, "provider": PROVIDER})
         if path == "/status":
@@ -855,12 +891,23 @@ class Handler(BaseHTTPRequestHandler):
                 "needs_human": "human", "trajectory": "task", "chat": "chat",
                 "clarify": "unclear", "intent": "meta"}
 
+        alive = {"ok": True}
+
         def emit(event: str, data: dict) -> None:
+            if not alive["ok"]:
+                return
             data = dict(data)
             data.setdefault("kind", KIND.get(event, event))
-            self.wfile.write(f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode())
-            self.wfile.flush()
+            try:
+                self.wfile.write(f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode())
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                alive["ok"] = False        # 前端刷新/关页：任务照跑完，靠 /history 补            
 
+
+
+
+        hist_add("me", text=text)
         verdict = classify(text) if mode == "auto" else {"mode": mode, "why": "用户指定"}
         emit("intent", {"mode": verdict["mode"], "why": verdict.get("why", ""), "text": text})
 
@@ -868,7 +915,9 @@ class Handler(BaseHTTPRequestHandler):
         if verdict["mode"] == "chat":
             _pub(None, "chat")
             try:
-                emit("chat", {"text": answer_chat(text)})
+                reply = answer_chat(text)
+                hist_add("chat", text=reply)
+                emit("chat", {"text": reply})
                 _pub(None, "idle")
             except Exception as e:  # noqa: BLE001
                 emit("needs_human", {"reason": f"对话模型出错：{e}"})
@@ -878,6 +927,7 @@ class Handler(BaseHTTPRequestHandler):
         # ── 判唔清：反问，等用户拣 ──
         if verdict["mode"] == "unclear":
             _pub(None, "idle")
+            hist_add("chat", text="想我帮你做，定系问下？", options=["当任务跑", "就系问下"])
             emit("clarify", {"question": "想我帮你做，定系问下？",
                              "options": [{"label": "当任务跑", "mode": "task"},
                                          {"label": "就系问下", "mode": "chat"}]})
@@ -890,6 +940,11 @@ class Handler(BaseHTTPRequestHandler):
             emit("needs_human", {"reason": st.get("note") or "云机未就绪"})
             emit("result", {"success": False, "message": "云机未就绪，唔开工"})
             return
+
+        tid = uuid.uuid4().hex[:8]
+        CURRENT_TASK["id"] = tid
+        hist_add("task", id=tid, text=text, phase="running", step=0, of=int(STEPS), msg="", detail="")
+        emit("task_started", {"id": tid, "of": int(STEPS)})
 
         q: "queue.Queue[tuple[str, dict]]" = queue.Queue()
         threading.Thread(target=run_agent, args=(text, q), daemon=True).start()

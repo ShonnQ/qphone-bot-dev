@@ -714,7 +714,7 @@ fetch("/health").then(r=>r.json()).then(h=>{
 
 /* ───────────────── 会话气泡（v1.3 IM 式）───────────────── */
 const chatEl = $("chat"), jumpEl = $("jump");
-let lastSide = null, taskCard = null, typingWrap = null;
+let lastSide = null, taskCard = null, typingWrap = null, lastTaskCardEl = null;
 
 const nearBottom = () => chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 48;
 function scrollDown(force){ if(force || nearBottom()) chatEl.scrollTop = chatEl.scrollHeight; }
@@ -766,8 +766,17 @@ function taskStart(){
     + '<svg viewBox="0 0 24 24" style="width:9px;height:9px;stroke:#FBBF24;fill:none;stroke-width:2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
     + '<span class="t-txt">执行中</span><span class="t-step">STEP 00 / ' + (STEP_OF || 20) + '</span></div>'
     + '<div class="t-bar"><i></i></div><div class="t-dt">已交畀 Mobilerun，等第一步</div>';
-  chatEl.append(card); lastSide = "task"; taskCard = card; scrollDown(true);
+  chatEl.append(card); lastSide = "task"; taskCard = card; lastTaskCardEl = card; scrollDown(true);
   return card;
+}
+function applyFinish(card, ok, msg){
+  if(!card) return;
+  card.classList.toggle("done", !!ok);
+  card.classList.toggle("bad", !ok);
+  const txt = card.querySelector(".t-txt"); if(txt) txt.textContent = ok ? "完成" : "要人睇一眼";
+  const ico = card.querySelector(".t-hd svg"); if(ico) ico.style.stroke = ok ? "#34D399" : "#fb7185";
+  if(msg){ const dt = card.querySelector(".t-dt"); if(dt) dt.textContent = String(msg).slice(0,150); }
+  scrollDown();
 }
 function taskUpdate(st){
   if(!taskCard) return;
@@ -779,13 +788,8 @@ function taskUpdate(st){
 }
 function taskFinish(ok, msg){
   if(!taskCard){ if(msg) say("bot", msg); return; }
-  taskCard.classList.toggle("done", !!ok);
-  taskCard.classList.toggle("bad", !ok);
-  taskCard.querySelector(".t-txt").textContent = ok ? "完成" : "要人睇一眼";
-  const ico = taskCard.querySelector(".t-hd svg");
-  if(ico) ico.style.stroke = ok ? "#34D399" : "#fb7185";
-  if(msg) taskCard.querySelector(".t-dt").textContent = String(msg).slice(0, 150);
-  taskCard = null; scrollDown();
+  applyFinish(taskCard, ok, msg);
+  taskCard = null;
 }
 
 async function submit(forceMode, echoText){
@@ -814,7 +818,9 @@ async function submit(forceMode, echoText){
         if(!data) continue;
         let o = {}; try{ o = JSON.parse(data); }catch(_){}
         if(ev === "intent"){
-          if(o.mode === "task"){ typing(false); chip("<b>1 条任务</b> · 交畀 Mobilerun"); taskStart(); paint({phase:"turn"}); }
+          if(o.mode === "task"){ typing(false); paint({phase:"turn"}); }
+        }else if(ev === "task_started"){
+          typing(false); chip("<b>1 条任务</b> · 交畀 Mobilerun"); taskStart();
         }else if(ev === "chat"){
           typing(false); paint({phase:"idle"}); say("bot", o.text || "（冇回应）");
         }else if(ev === "clarify"){
@@ -831,7 +837,15 @@ async function submit(forceMode, echoText){
           });
           g.append(picks); chatEl.append(g); lastSide = "bot"; scrollDown(true);
         }else if(ev === "activity"){
-          typing(false); if(!taskCard) taskStart(); taskUpdate(o); paint(o);
+          typing(false);
+          if(o.phase === "done" || o.phase === "human"){
+            paint(o);                          // 只更新过程图，唔再开新卡（防「鬼卡」）
+          }else{
+            if(!taskCard && !(lastTaskCardEl && !lastTaskCardEl.classList.contains("done")
+                              && !lastTaskCardEl.classList.contains("bad"))) taskStart();
+            if(taskCard) taskUpdate(o);
+            paint(o);
+          }
           if(o.phase === "act") refreshLive(true);
         }else if(ev === "needs_human"){
           typing(false);
@@ -893,7 +907,49 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(()=>alignC
 requestAnimationFrame(()=>alignComms());
 setTimeout(alignComms, 250);
 
-fetch("/state").then(r=>r.json()).then(paint).catch(()=>paint({phase:"idle"}));
+/* ───── 会话历史：刷新 / 断线后由服务端补返（唔会得个空壳）───── */
+const pad2 = n => String(n || 0).padStart(2, "0");
+function renderHist(it){
+  if(it.kind === "me"){ say("me", it.text || ""); return; }
+  if(it.kind === "chat"){ say("bot", it.text || ""); return; }
+  if(it.kind === "task"){
+    chip("<b>1 条任务</b> · 交畀 Mobilerun");
+    const card = taskStart();
+    const step = it.step || 0, of = it.of || STEP_OF;
+    card.querySelector(".t-step").textContent = "STEP " + pad2(step) + " / " + pad2(of);
+    card.querySelector(".t-bar i").style.width = Math.round(100 * step / of) + "%";
+    if(it.detail) card.querySelector(".t-dt").textContent = String(it.detail).slice(0, 96);
+    if(it.phase && it.phase !== "running") applyFinish(card, it.phase === "done", it.msg);
+    taskCard = null;                       // 历史卡唔再接手实时更新
+  }
+}
+async function loadHistory(){
+  try{
+    const h = await (await fetch("/history", {cache:"no-store"})).json();
+    if(h.of) STEP_OF = h.of;
+    (h.items || []).forEach(renderHist);
+    paint(h.state || {phase:"idle"});
+  }catch(_){ paint({phase:"idle"}); }
+}
+loadHistory();
+
+/* 断线重开：最后一张卡未收工就每 3 秒同服务端对一次 */
+async function syncLiveTask(){
+  const c = lastTaskCardEl;
+  if(!c || c.classList.contains("done") || c.classList.contains("bad")) return;
+  try{
+    const h = await (await fetch("/history", {cache:"no-store"})).json();
+    const t = [...(h.items || [])].reverse().find(x => x.kind === "task");
+    if(!t) return;
+    const step = t.step || 0, of = t.of || STEP_OF;
+    c.querySelector(".t-step").textContent = "STEP " + pad2(step) + " / " + pad2(of);
+    c.querySelector(".t-bar i").style.width = Math.round(100 * step / of) + "%";
+    if(t.detail) c.querySelector(".t-dt").textContent = String(t.detail).slice(0, 96);
+    if(t.phase && t.phase !== "running") applyFinish(c, t.phase === "done", t.msg);
+    paint(h.state || {});
+  }catch(_){}
+}
+setInterval(syncLiveTask, 3000);
 
 const liveImg = $("liveImg"), liveOff = $("liveOff"), ldot = $("ldot");
 let liveURL = null, liveBusy = false, liveLast = 0, slowLive = false;
