@@ -146,6 +146,55 @@ def llm_route() -> tuple[str, str, str]:
     return "XAI", "https://api.x.ai/v1", _xai_token()
 
 
+# ─────────────────────────────── 意图判别（chat / task / unclear）
+TASK_WORDS = ("打开", "开一", "开启", "开下", "帮我开", "关掉", "关闭", "装", "安装", "下载", "卸载",
+              "搜", "查找", "搜索", "点击", "点一下", "点开", "点佢", "按一下", "滑", "输入", "发送",
+              "发条", "发个", "截图", "录屏", "返桌面", "返出去", "返首页",
+              "设成", "设置成", "改成", "调成", "登录", "登入", "重启", "关机", "开机", "拍", "播",
+              "暂停", "返回", "回桌面", "拨", "打电话", "复制", "粘贴", "删掉", "删除", "上传")
+CHAT_WORDS = ("你好", "哈佬", "hello", "hi", "咩", "什么", "点解", "为什么", "分别", "有冇", "系咪",
+              "边个", "几多", "多少", "你觉得", "解释", "讲讲", "介绍", "可以吗", "?", "？", "点样")
+
+SYS_CHAT = ("你系 QPhone（云手机助理）嘅对话模式，讲粤语书面语，简洁直接，最多三句。"
+            "你唔会操作手机；如果用户想要你做事，就提醒佢可以用一句交代叫我做。")
+
+
+def classify(text: str) -> dict:
+    """规则判别：action 词 vs 问句词，打和就判唔清（唔靠模型，零成本零延迟）。"""
+    s = (text or "").strip()
+    low = s.lower()
+    task = sum(1 for w in TASK_WORDS if w in s)
+    chat = sum(1 for w in CHAT_WORDS if (w in low if w.isascii() else w in s))
+    if not s:
+        return {"mode": "chat", "why": "空", "task": 0, "chat": 0}
+    if task and not chat:
+        return {"mode": "task", "why": f"动作词 {task}", "task": task, "chat": chat}
+    if chat and not task:
+        return {"mode": "chat", "why": f"问句 {chat}", "task": task, "chat": chat}
+    if task and chat:
+        return {"mode": "unclear", "why": "又有动作词又有问句", "task": task, "chat": chat}
+    if len(s) <= 4:
+        return {"mode": "unclear", "why": "太短，唔知想点", "task": 0, "chat": 0}
+    return {"mode": "chat", "why": "无动作词", "task": 0, "chat": 0}
+
+
+def answer_chat(text: str, timeout: float = 40.0) -> str:
+    """直接问模型（唔经 Mobilerun、唔睇屏）。"""
+    import urllib.request
+    provider, base, key = llm_route()
+    payload = {"model": MODEL, "temperature": 0.5, "max_tokens": 600,
+               "messages": [{"role": "system", "content": SYS_CHAT},
+                            {"role": "user", "content": text}]}
+    req = urllib.request.Request(
+        base.rstrip("/") + "/chat/completions",
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # 绕过 Clash
+    with opener.open(req, timeout=timeout) as r:
+        data = json.loads(r.read().decode("utf-8", "ignore"))
+    return (data["choices"][0]["message"].get("content") or "").strip()
+
+
 def _xai_token() -> str:
     try:
         a = json.loads((Path.home() / ".hermes" / "auth.json").read_text(encoding="utf-8"))
@@ -774,6 +823,7 @@ class Handler(BaseHTTPRequestHandler):
         text = (payload.get("text") or "").strip()
         if not text:
             return self._send_json({"ok": False, "error": "text 唔可以为空"}, 400)
+        mode = (payload.get("mode") or "auto").strip().lower()   # auto | task | chat
 
         self.send_response(200)
         self._cors()
@@ -782,9 +832,37 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "close")
         self.end_headers()
 
+        KIND = {"activity": "task", "status": "status", "progress": "task", "result": "task",
+                "needs_human": "human", "trajectory": "task", "chat": "chat",
+                "clarify": "unclear", "intent": "meta"}
+
         def emit(event: str, data: dict) -> None:
+            data = dict(data)
+            data.setdefault("kind", KIND.get(event, event))
             self.wfile.write(f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode())
             self.wfile.flush()
+
+        verdict = classify(text) if mode == "auto" else {"mode": mode, "why": "用户指定"}
+        emit("intent", {"mode": verdict["mode"], "why": verdict.get("why", ""), "text": text})
+
+        # ── 对话：唔起 Mobilerun，直接问模型 ──
+        if verdict["mode"] == "chat":
+            _pub(None, "chat")
+            try:
+                emit("chat", {"text": answer_chat(text)})
+                _pub(None, "idle")
+            except Exception as e:  # noqa: BLE001
+                emit("needs_human", {"reason": f"对话模型出错：{e}"})
+                emit("result", {"success": False, "message": str(e)})
+            return
+
+        # ── 判唔清：反问，等用户拣 ──
+        if verdict["mode"] == "unclear":
+            _pub(None, "idle")
+            emit("clarify", {"question": "想我帮你做，定系问下？",
+                             "options": [{"label": "当任务跑", "mode": "task"},
+                                         {"label": "就系问下", "mode": "chat"}]})
+            return
 
         st = qphone_status()
         emit("status", {"state": "running" if st.get("booted") else "not_ready",

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>QPhone · UI 设计 v1.3（会话气泡 · IM 式）</title>
+<style>
+  :root{
+    color-scheme:dark;
+    --bg:#080a0e;--paper:#0b1016;--fg:#eef3f8;--soft:#96a3b2;
+    --line:rgba(255,255,255,.12);--acc:#7dd3fc;--acc2:#a78bfa;--amber:#FBBF24;--ok:#34D399;--no:#fb7185;
+  }
+  *{box-sizing:border-box}
+  body{margin:0 auto;max-width:1180px;padding:26px 20px 60px;background:var(--bg);color:var(--fg);
+    font:15px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+  h1{font-size:20px;margin:0 0 3px}
+  .sub{color:var(--soft);font-size:13px;margin-bottom:18px}
+  h2{font-size:15.5px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line);color:var(--acc)}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+  th,td{text-align:left;padding:7px 10px;border:1px solid var(--line);vertical-align:top}
+  th{background:rgba(125,211,252,.08);font-weight:600;white-space:nowrap}
+  td:first-child{white-space:nowrap;color:var(--acc);font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:rgba(255,255,255,.07);padding:1px 5px;border-radius:3px}
+  .note{border-left:3px solid var(--acc);padding:8px 12px;margin:12px 0;font-size:13px;background:rgba(125,211,252,.07);color:#cfd8e3}
+  .small{font-size:12px;color:var(--soft)}
+  .art{border:1px solid var(--line);border-radius:12px;background:var(--paper);margin:12px 0 8px;overflow-x:auto}
+  .artcap{display:flex;justify-content:space-between;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);
+    font:10.5px/1.6 ui-monospace,Menlo,monospace;letter-spacing:1px;color:var(--soft);text-transform:uppercase}
+  .artcap b{color:var(--fg);font-weight:600;letter-spacing:.4px}
+
+  /* ══════ MOCK：IM 式会话（全圆扁平气泡 / 连发分组 / 系统胶囊 / 底部四件套）══════ */
+  .mock{min-width:640px;padding:14px 16px 16px;background:
+      radial-gradient(700px 240px at 10% -18%,rgba(125,211,252,.10),transparent 62%),
+      radial-gradient(620px 220px at 92% -22%,rgba(167,139,250,.08),transparent 60%),#080b10}
+  .panel{position:relative;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,#10151c,#0c1117);
+    display:flex;flex-direction:column;min-height:430px;overflow:hidden}
+  .hd-bar{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.07);
+    background:rgba(255,255,255,.02)}
+  .hd-av{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
+    background:linear-gradient(140deg,rgba(52,211,153,.35),rgba(52,211,153,.12));border:1px solid rgba(52,211,153,.45)}
+  .hd-av svg{width:11px;height:11px;stroke:var(--ok);fill:none;stroke-width:2.2;stroke-linecap:round}
+  .hd-name{font-size:10.12px;font-weight:600;line-height:1.3}
+  .hd-sub{font:7px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.8px;color:var(--soft)}
+  .hd-dot{width:5px;height:5px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok);margin-left:2px}
+  .hd-more{margin-left:auto;font:13px/1 ui-monospace,Menlo,monospace;color:var(--soft)}
+
+  .chat{display:flex;flex-direction:column;gap:14px;padding:12px;flex:1 1 auto;overflow-y:auto}
+
+  .sys{align-self:center;font:8px/1.5 ui-monospace,Menlo,monospace;letter-spacing:.6px;color:var(--soft);
+    background:rgba(255,255,255,.055);border-radius:999px;padding:4px 10px;text-align:center;max-width:90%}
+  .sys b{color:#cfd8e3;font-weight:600}
+
+  /* 气泡：四角同 16px、扁平、无边框 */
+  .b{max-width:74%;font-size:10.12px;line-height:1.65;padding:9px 12px;border-radius:16px}
+  .b.me{align-self:flex-end;background:rgba(125,211,252,.17);color:#eaf6ff}
+  .b.bot{align-self:flex-start;background:rgba(255,255,255,.065);color:#eef3f8}
+  .g{display:flex;flex-direction:column;gap:4px;max-width:100%}
+  .g.me{align-items:flex-end}
+  .g.bot{align-items:flex-start}
+  .who{font:7px/1.4 ui-monospace,Menlo,monospace;letter-spacing:1px;color:var(--soft);text-transform:uppercase;padding:0 4px 1px}
+
+  /* 任务卡：同气泡形，加语义色内描边 */
+  .task{max-width:78%;align-self:flex-start;border-radius:16px;padding:10px 12px;
+    background:linear-gradient(180deg,rgba(251,191,36,.10),rgba(251,191,36,.03));
+    box-shadow:inset 0 0 0 1px rgba(251,191,36,.32)}
+  .task .t-hd{display:flex;align-items:center;gap:6px;font-size:10.12px;font-weight:600}
+  .task .t-step{margin-left:auto;font:8px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.8px;color:#e9d9a8}
+  .task .t-bar{height:3px;border-radius:2px;background:rgba(255,255,255,.10);margin:8px 0 6px;overflow:hidden}
+  .task .t-bar i{display:block;height:100%;width:35%;border-radius:2px;
+    background:repeating-linear-gradient(90deg,transparent 0 5px,rgba(0,0,0,.5) 5px 7px),linear-gradient(90deg,#FBBF24,#f59e0b)}
+  .task .t-dt{font-size:9px;color:#cfd8e3}
+  .task.done{background:linear-gradient(180deg,rgba(52,211,153,.10),rgba(52,211,153,.03));
+    box-shadow:inset 0 0 0 1px rgba(52,211,153,.32)}
+  .task.done .t-bar i{width:100%;background:linear-gradient(90deg,var(--ok),#10b981)}
+  .task.bad{background:linear-gradient(180deg,rgba(251,113,133,.11),rgba(251,113,133,.03));
+    box-shadow:inset 0 0 0 1px rgba(251,113,133,.38)}
+  .task.bad .t-bar i{width:100%;background:var(--no)}
+
+  .picks{display:flex;gap:6px;margin-top:6px}
+  .pick{font:8px/1 ui-monospace,Menlo,monospace;letter-spacing:.6px;color:#bfe9ff;background:rgba(125,211,252,.10);
+    border:1px solid rgba(125,211,252,.34);border-radius:999px;padding:4px 9px}
+
+  .typing{display:inline-flex;gap:4px;align-items:center;padding:11px 13px}
+  .typing i{width:4px;height:4px;border-radius:50%;background:var(--soft);animation:tb 1.2s infinite}
+  .typing i:nth-child(2){animation-delay:.18s}.typing i:nth-child(3){animation-delay:.36s}
+  @keyframes tb{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-2px)}}
+
+  .inbar{display:flex;align-items:center;gap:7px;padding:9px 12px;border-top:1px solid rgba(255,255,255,.07);
+    background:rgba(255,255,255,.02)}
+  .plus{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:13px/1 ui-monospace,Menlo,monospace;
+    color:var(--soft);background:rgba(255,255,255,.06);border:1px solid var(--line);flex:0 0 auto}
+  .inp{flex:1;height:30px;border-radius:999px;padding:7px 12px;font-size:9.5px;color:var(--soft);
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);display:flex;align-items:center}
+  .mic{font-size:11px;color:var(--soft);flex:0 0 auto}
+  .send{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
+    background:linear-gradient(140deg,#ef4444,#b91c1c);box-shadow:0 4px 12px -6px #dc2626}
+  .send svg{width:11px;height:11px;stroke:#fff5f5;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+
+<h1>QPhone · UI 设计 v1.3（会话气泡 · IM 式）</h1>
+<div class="sub">会话窗口改成 IM 式气泡流：全圆角扁平气泡、同边连发自动分组、系统胶囊分隔、顶部对话头、底部 <code>+ / 输入 / 话筒 / 发送</code>。形态参考 Grok Bot 会话窗，配色仍用 QPhone 暗黑主题（唔抄佢黑白）。</div>
+
+<div class="note">
+v1.2 过程图与实况窗 <b>唔动</b>；只把过程图下面 <code>#log</code> 换成 <code>.chat</code>，事件协议加 <code>kind</code>。
+</div>
+
+<h2>1 · 会话区（IM 式 · 任务 + 闲聊混合）</h2>
+<div class="art">
+  <div class="artcap"><b>会话气泡 / 混合流</b><span>右：你 · 左：云机 · 卡：任务</span></div>
+  <div class="mock">
+    <div class="panel">
+      <div class="hd-bar">
+        <span class="hd-av"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>
+        <div><div class="hd-name">云机 · QPhone</div><div class="hd-sub">ANDROID 13 · 10532</div></div>
+        <i class="hd-dot"></i>
+        <span class="hd-more">⋯</span>
+      </div>
+
+      <div class="chat">
+        <span class="sys">今日 15:29</span>
+
+        <div class="g me"><div class="b me">帮我打开应用宝，下载汽水音乐</div></div>
+
+        <span class="sys"><b>1 条任务</b> · 交畀 Mobilerun</span>
+
+        <div class="task">
+          <div class="t-hd">
+            <svg viewBox="0 0 24 24" style="width:11px;height:11px;stroke:#FBBF24;fill:none;stroke-width:2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            执行中 · 应用宝搜索
+            <span class="t-step">STEP 07 / 20</span>
+          </div>
+          <div class="t-bar"><i></i></div>
+          <div class="t-dt">已开应用宝 → 点搜索框 → 输入「汽水音乐」</div>
+        </div>
+
+        <div class="g me">
+          <div class="b me">顺便问下，汽水音乐同 QQ 音乐有咩分别？</div>
+          <div class="b me">唔使急，做完先答都得</div>
+        </div>
+
+        <div class="g bot">
+          <div class="who">云机 · 对话</div>
+          <div class="b bot">汽水音乐主打算法推荐同短音频；QQ 音乐版权多、曲库全。你要边种？</div>
+        </div>
+
+        <div class="task done">
+          <div class="t-hd">
+            <svg viewBox="0 0 24 24" style="width:11px;height:11px;stroke:#34D399;fill:none;stroke-width:2.4"><path d="M5 13l4 4L19 7"/></svg>
+            完成 · 汽水音乐已装好
+            <span class="t-step">14 / 20 步</span>
+          </div>
+          <div class="t-bar"><i></i></div>
+          <div class="t-dt">下载 170.8MB → 安装 → 打开首页，按钮已变「打开」 · 4 分 12 秒</div>
+        </div>
+
+        <div class="g bot">
+          <div class="b bot typing"><i></i><i></i><i></i></div>
+        </div>
+      </div>
+
+      <div class="inbar">
+        <span class="plus">+</span>
+        <div class="inp">给 云机 发消息</div>
+        <span class="mic">🎙</span>
+        <span class="send"><svg viewBox="0 0 24 24"><path d="M4 12h13M12 6l6 6-6 6"/></svg></span>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="small">同边连发贴成一组（间隔 4px），换边留 14px；跨日 / 跨任务用系统胶囊分隔，唔靠时间戳满屏跑。</p>
+
+<h2>1b · 判唔清：反问 + 两个胶囊</h2>
+<div class="art">
+  <div class="artcap"><b>unclear 态</b><span>唔猜 · 直接问</span></div>
+  <div class="mock">
+    <div class="panel" style="min-height:250px">
+      <div class="hd-bar">
+        <span class="hd-av"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>
+        <div><div class="hd-name">云机 · QPhone</div><div class="hd-sub">对话中 · 未起 MOBILERUN</div></div>
+        <i class="hd-dot"></i><span class="hd-more">⋯</span>
+      </div>
+      <div class="chat">
+        <div class="g me"><div class="b me">设置</div></div>
+        <div class="g bot">
+          <div class="who">云机 · 对话</div>
+          <div class="b bot">想我帮你<b>打开设置</b>，定系问设置嘅嘢？</div>
+          <div class="picks"><span class="pick">当任务跑</span><span class="pick">就系问下</span></div>
+        </div>
+      </div>
+      <div class="inbar">
+        <span class="plus">+</span><div class="inp">给 云机 发消息</div><span class="mic">🎙</span>
+        <span class="send"><svg viewBox="0 0 24 24"><path d="M4 12h13M12 6l6 6-6 6"/></svg></span>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="small">判唔清时唔猜：反问一句 + 两个胶囊，点完即消失，决定权喺你。</p>
+
+<h2>2 · 气泡与卡片（形态全部照 IM）</h2>
+<table>
+  <tr><th style="width:110px">元素</th><th>形态</th><th style="width:180px">说明</th></tr>
+  <tr><td>你 · me</td><td>右对齐、扁平填充（主题天蓝 17%）、<b>四角同 16px</b>、无边框、`padding 9px 12px`、≤74%</td><td>唔用尖角尾巴，靠位置分左右</td></tr>
+  <tr><td>云机 · bot</td><td>左对齐、中性填充（白 6.5%）、同圆角同内距</td><td>连发时首条上方标「云机 · 对话」</td></tr>
+  <tr><td>分组</td><td>同边连发 `gap 4px`；换边 `gap 14px`</td><td>一堆短句唔会散成一列</td></tr>
+  <tr><td>系统胶囊</td><td>居中、白 5.5%、999px、8px 等宽</td><td>「今日 15:29」「1 条任务 · 交畀 Mobilerun」</td></tr>
+  <tr><td>任务卡</td><td>同气泡形（16px）+ 语义色内描边：琥珀执行 / 绿完成 / 红要人；头部 + `STEP n / m` + 3px 进度条 + 一行详情</td><td>形状同气泡一致，只多语义色</td></tr>
+  <tr><td>反问胶囊</td><td>`当任务跑` / `就系问下`，999px、天蓝描边</td><td>只喺 unclear 出现</td></tr>
+  <tr><td>typing</td><td>三点 4px、1.2s 跳动，形态同气泡</td><td>收到首个事件即消失</td></tr>
+</table>
+
+<h2>3 · 规格（照真壳 1.5 zoom × 字体 75%）</h2>
+<table>
+  <tr><th style="width:150px">项</th><th>值</th></tr>
+  <tr><td>会话区</td><td>`.chat{flex:1 1 0;overflow-y:auto;gap:14px;padding:12px}`</td></tr>
+  <tr><td>顶部对话头</td><td>高 ~40px：22px 头像 + 名称 10.12px + 副行 7px 等宽 + 绿点 + 右侧 `⋯`</td></tr>
+  <tr><td>气泡</td><td>圆角 16px 四角一致、`padding 9px 12px`、正文 10.12px / 1.65、宽 ≤74%（任务卡 ≤78%）</td></tr>
+  <tr><td>底色</td><td>你 `rgba(125,211,252,.17)`；云机 `rgba(255,255,255,.065)`；两者都唔用边框，靠明度差</td></tr>
+  <tr><td>底部输入栏</td><td>高 44px：`+` 24px 圆 / 输入框 999px 圆角（占位「给 云机 发消息」）/ 🎙 / 26px 红色圆形发送键</td></tr>
+  <tr><td>时间</td><td>唔入气泡；用系统胶囊（跨 5 分钟、跨日、跨任务各一次）</td></tr>
+  <tr><td>滚动</td><td>新消息贴底；向上翻锁住 + 「↓ 跳到最新」胶囊</td></tr>
+  <tr><td>长文本</td><td>超 3 行折叠 + 「展开」；步骤清单走等宽小字块</td></tr>
+</table>
+
+<h2>4 · 与过程图嘅分工</h2>
+<table>
+  <tr><th style="width:140px">输入性质</th><th>过程图</th><th>会话区</th></tr>
+  <tr><td>任务</td><td>v1.2 照走：黄框闪缩、琥珀链、未走线 `.28`</td><td>系统胶囊「1 条任务」+ 任务卡随 `phase` 变色</td></tr>
+  <tr><td>对话</td><td>全灰：唔着灯、线 `.2`、状态「对话中」</td><td>纯气泡，无步数无进度条</td></tr>
+  <tr><td>判唔清</td><td>唔动</td><td>反问气泡 + 两个胶囊</td></tr>
+</table>
+
+<h2>5 · 落地清单</h2>
+<table>
+  <tr><th style="width:50px">步</th><th>做咩</th><th style="width:220px">验收</th></tr>
+  <tr><td>1</td><td>`serve.py` 事件加 `kind`（`user|chat|task|human|error`）+ `step/of`</td><td>`/turn` 流逐条可辨</td></tr>
+  <tr><td>2</td><td>壳 `#log` → `.chat` + 顶部对话头 + 系统胶囊 + 连发分组</td><td>连发贴组、换边留白</td></tr>
+  <tr><td>3</td><td>任务卡随 `phase` 变琥珀 / 绿 / 红</td><td>真跑「打开设置」全绿</td></tr>
+  <tr><td>4</td><td>typing + 「跳到最新」+ 长文本折叠</td><td>送出即出点，回底一按即到</td></tr>
+  <tr><td>5</td><td>底部输入栏改 `+ / 输入 / 🎙 / 发送`（话筒先留位唔接）</td><td>键位同 IM 一致</td></tr>
+  <tr><td>6</td><td>接 `chat / task / unclear` 判定（规则 + 模型兜底）</td><td>「你好」唔再起 Mobilerun</td></tr>
+  <tr><td>7</td><td>四档量测 1600 / 1440 / 1280 / 430 + 长文本 / 连发 / 空态</td><td>无横向溢出、长句折行正常</td></tr>
+</table>
+
+<p class="small" style="margin-top:16px">文件：qphone-bot-dev/docs/UI设计-会话气泡-v1.3.html　·　形态参考 Grok Bot 会话窗（气泡 / 连发分组 / 系统胶囊 / 输入栏），配色沿用 QPhone 暗黑主题。</p>
+
+</body>
+</html>

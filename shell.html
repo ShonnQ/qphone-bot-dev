@@ -409,6 +409,89 @@
   @media (max-width:1100px){
     .tailwrap{width:100%;justify-content:center;margin-top:10px}
   }
+
+  /* ═════ v1.3 会话气泡（IM 式）═════ */
+  .chatwrap{position:relative;display:flex;flex-direction:column;flex:1 1 0;min-height:180px;
+    margin-top:12px;border-top:1px solid rgba(255,255,255,.07)}
+  .chat-hd{display:flex;align-items:center;gap:7px;padding:8px 2px 7px;flex:0 0 auto}
+  .ch-av{width:17px;height:17px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
+    background:linear-gradient(140deg,rgba(52,211,153,.34),rgba(52,211,153,.12));border:1px solid rgba(52,211,153,.45)}
+  .ch-av svg{width:9px;height:9px;stroke:#34D399;fill:none;stroke-width:2.4;stroke-linecap:round}
+  .ch-id{line-height:1.25}
+  .ch-id b{font-size:9.5px;font-weight:600;display:block}
+  .ch-id small{font:6.5px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.7px;color:var(--soft);display:block}
+  .ch-dot{width:4px;height:4px;border-radius:50%;background:#34D399;box-shadow:0 0 6px #34D399}
+  .ch-more{margin-left:auto;font:11px/1 ui-monospace,Menlo,monospace;color:var(--soft)}
+
+  .chat{flex:1 1 0;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:9px;padding:2px 2px 4px}
+  .chat::-webkit-scrollbar{width:6px}
+  .chat::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
+
+  .sys{align-self:center;font:8px/1.5 ui-monospace,Menlo,monospace;letter-spacing:.6px;color:var(--soft);
+    background:rgba(255,255,255,.055);border-radius:999px;padding:3px 8px;text-align:center;max-width:92%}
+  .sys b{color:#cfd8e3;font-weight:600}
+
+  .g{display:flex;flex-direction:column;gap:3px;max-width:100%}
+  .g.me{align-items:flex-end}
+  .g.bot{align-items:flex-start}
+  .who{font:7px/1.3 ui-monospace,Menlo,monospace;letter-spacing:.9px;color:var(--soft);
+    text-transform:uppercase;padding:0 3px 1px}
+
+  .b{max-width:74%;font-size:10.12px;line-height:1.6;padding:7px 10px;border-radius:14px;white-space:pre-wrap;
+    word-break:break-word;position:relative}
+  .b.me{align-self:flex-end;background:rgba(125,211,252,.17);color:#eaf6ff}
+  .b.bot{align-self:flex-start;background:rgba(255,255,255,.065);color:#eef3f8}
+  .b.fold{max-height:80px;overflow:hidden}
+  .b.fold:after{content:"";position:absolute;left:0;right:0;bottom:0;height:18px;
+    background:linear-gradient(transparent,var(--panel))}
+  .unfold{font:7px/1 ui-monospace,Menlo,monospace;color:#bfe9ff;background:none;border:0;cursor:pointer;
+    padding:2px 3px;align-self:flex-start}
+
+  .task{max-width:78%;align-self:flex-start;border-radius:12px;padding:8px 10px;
+    background:linear-gradient(180deg,rgba(251,191,36,.10),rgba(251,191,36,.03));
+    box-shadow:inset 0 0 0 1px rgba(251,191,36,.32)}
+  .task .t-hd{display:flex;align-items:center;gap:5px;font-size:10.12px;font-weight:600}
+  .task .t-step{margin-left:auto;font:8px/1.3 ui-monospace,Menlo,monospace;letter-spacing:.6px;color:#e9d9a8}
+  .task .t-bar{height:2px;border-radius:2px;background:rgba(255,255,255,.10);margin:6px 0 5px;overflow:hidden}
+  .task .t-bar i{display:block;height:100%;width:0;border-radius:2px;transition:width .4s ease;
+    background:repeating-linear-gradient(90deg,transparent 0 4px,rgba(0,0,0,.5) 4px 6px),linear-gradient(90deg,#FBBF24,#f59e0b)}
+  .task .t-dt{font-size:9px;color:#cfd8e3;line-height:1.5}
+  .task.done{background:linear-gradient(180deg,rgba(52,211,153,.10),rgba(52,211,153,.03));
+    box-shadow:inset 0 0 0 1px rgba(52,211,153,.32)}
+  .task.done .t-bar i{width:100%!important;background:linear-gradient(90deg,#34D399,#10b981)}
+  .task.bad{background:linear-gradient(180deg,rgba(251,113,133,.11),rgba(251,113,133,.03));
+    box-shadow:inset 0 0 0 1px rgba(251,113,133,.38)}
+  .task.bad .t-bar i{width:100%!important;background:#fb7185}
+
+  .picks{display:flex;gap:5px;margin-top:5px}
+  .pick{font:8px/1 ui-monospace,Menlo,monospace;letter-spacing:.5px;color:#bfe9ff;background:rgba(125,211,252,.10);
+    border:1px solid rgba(125,211,252,.34);border-radius:999px;padding:4px 8px;cursor:pointer}
+  .pick:hover{background:rgba(125,211,252,.18)}
+
+  .typing{display:inline-flex;gap:3px;align-items:center;padding:8px 10px}
+  .typing i{width:3px;height:3px;border-radius:50%;background:var(--soft);animation:tb 1.2s infinite}
+  .typing i:nth-child(2){animation-delay:.18s}.typing i:nth-child(3){animation-delay:.36s}
+  @keyframes tb{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-2px)}}
+
+  .jump{position:absolute;left:50%;transform:translateX(-50%);bottom:6px;display:none;cursor:pointer;
+    font:7px/1 ui-monospace,Menlo,monospace;letter-spacing:.6px;color:#bfe9ff;background:#0b1017;
+    border:1px solid rgba(125,211,252,.3);border-radius:999px;padding:4px 9px;z-index:3}
+  .jump.on{display:block}
+
+  /* 输入栏：+ / 输入 / 🎙 / 圆形发送 */
+  footer{display:flex;align-items:center;gap:6px}
+  #plus,#mic{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
+    font:12px/1 ui-monospace,Menlo,monospace;color:var(--soft);background:rgba(255,255,255,.06);
+    border:1px solid var(--line);cursor:pointer;padding:0}
+  #mic{font-size:10px}
+  #input{flex:1;height:32px;min-height:32px;max-height:96px;border-radius:999px;padding:8px 11px;
+    font-size:9.5px;line-height:1.4;resize:none;overflow-y:auto;
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:var(--fg)}
+  #input:focus{outline:none;border-color:rgba(125,211,252,.45)}
+  #send{width:26px;height:26px;min-width:26px;border-radius:50%;border:0;display:grid;place-items:center;
+    cursor:pointer;background:linear-gradient(140deg,#ef4444,#b91c1c);box-shadow:0 4px 12px -6px #dc2626;padding:0}
+  #send svg{width:11px;height:11px;stroke:#fff5f5;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+  #send:disabled{opacity:.45;cursor:default;box-shadow:none}
 </style>
 </head>
 <body>
@@ -506,7 +589,16 @@
   <div class="detail" id="detail"></div>
   <div class="tele"><span>qph-0.8</span><span>mac :8777</span><span>adb :10532</span><span id="teleModel">grok-4.7</span></div>
 
-  <main id="log"></main>
+  <section class="chatwrap">
+    <div class="chat-hd">
+      <span class="ch-av"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>
+      <div class="ch-id"><b>云机 · QPhone</b><small id="chatSub">ANDROID 13 · 10532</small></div>
+      <i class="ch-dot" id="chDot"></i>
+      <span class="ch-more">⋯</span>
+    </div>
+    <div class="chat" id="chat"></div>
+    <span class="jump" id="jump">↓ 跳到最新</span>
+  </section>
 
   </div><!-- /board -->
 
@@ -524,13 +616,16 @@
 <div id="lb"><img id="lbImg" alt="云机画面 大图"><span class="lbx" id="lbX">ESC 关</span></div>
 
 <footer>
-  <textarea id="input" placeholder="讲一句交代，回车送出 · Shift+回车换行"></textarea>
-  <button id="send">发送</button>
+  <button id="plus" title="附加（未接）">+</button>
+  <textarea id="input" rows="1" placeholder="给 云机 发消息"></textarea>
+  <button id="mic" title="语音（未接）">🎙</button>
+  <button id="send" aria-label="发送"><svg viewBox="0 0 24 24"><path d="M4 12h13M12 6l6 6-6 6"/></svg></button>
 </footer>
 
 <script>
 const $ = id => document.getElementById(id);
-const log=$("log"), input=$("input"), send=$("send"), meta=$("meta"), dot=$("dot");
+const input=$("input"), send=$("send"), meta=$("meta"), dot=$("dot");
+let STEP_OF = 20;
 const nowEl=$("now"), stepEl=$("stepno"), detailEl=$("detail"), progEl=$("prog"), pctEl=$("pct");
 
 const CHAIN = ["you","shell","turn","mob","portal","ui"];
@@ -552,13 +647,14 @@ function paint(st){
   else if(p === "step"){ idx = 3; }
   else if(p === "think"){ idx = 3; modelHot = true; }
   else if(p === "act"){ idx = 5; }
+  else if(p === "chat"){ idx = -1; }          // 对话态：过程图全暗，唔着灯
   else if(p === "human"){ idx = 0; }
   else if(p === "done"){ idx = 5; status = "done"; }
   else { idx = 0; }
 
   for(let i=0;i<idx;i++) NODES[CHAIN[i]].classList.add("done");
   if(idx >= 0 && status !== "done") NODES[CHAIN[idx]].classList.add("hot");
-  const running = ["step","think","act","turn"].includes(p);
+  const running = ["step","think","act","turn","chat"].includes(p);
   for(let i=0;i<idx;i++){ const l = LINKS[i]; if(l) l.classList.add("on"); }
   if(running) LINKS.forEach((l,i)=>{ if(i >= idx) l.classList.add("mute"); });
   if(modelHot){ NODES.model.classList.add("hot");
@@ -569,7 +665,7 @@ function paint(st){
   if(typeof alignComms === "function") alignComms();   // 节点宽度变咗都保持对准
 
   const labels = {idle:"等紧你讲嘢", turn:"交畀 /turn", step:"Mobilerun 睇屏",
-                  think:"模型谂紧", act:"Portal 做紧", human:"要人睇一眼", done:"做完"};
+                  think:"模型谂紧", act:"Portal 做紧", human:"要人睇一眼", done:"做完", chat:"对话中"};
   nowEl.textContent = labels[p] || p;
   const sc = $("stepChip");
   if(st.of && st.of > 0){
@@ -596,7 +692,6 @@ function paint(st){
 }
 
 function el(c,t){ const d=document.createElement("div"); d.className=c; if(t) d.textContent=t; return d; }
-function scroll(){ log.scrollTop = log.scrollHeight; }
 
 async function refreshStatus(){
   try{
@@ -617,56 +712,151 @@ fetch("/health").then(r=>r.json()).then(h=>{
   alignComms();
 }).catch(()=>{});
 
-function addTurn(who){
-  const box = el("turn" + (who === "你" ? " me" : ""));
-  const body = el("body"); box.append(el("who", who), body); log.append(box); scroll();
-  return body;
+/* ───────────────── 会话气泡（v1.3 IM 式）───────────────── */
+const chatEl = $("chat"), jumpEl = $("jump");
+let lastSide = null, taskCard = null, typingWrap = null;
+
+const nearBottom = () => chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 48;
+function scrollDown(force){ if(force || nearBottom()) chatEl.scrollTop = chatEl.scrollHeight; }
+chatEl.addEventListener("scroll", () => jumpEl.classList.toggle("on", !nearBottom()));
+jumpEl.addEventListener("click", () => { scrollDown(true); jumpEl.classList.remove("on"); });
+
+function chip(html){
+  const d = document.createElement("div"); d.className = "sys"; d.innerHTML = html;
+  chatEl.append(d); lastSide = "sys"; scrollDown();
+  return d;
 }
-function addEvent(body, kind, label, text){
-  const row = el("ev " + kind);
-  row.append(document.createTextNode(text || ""));
-  body.append(row); scroll();
+function group(side){
+  const last = chatEl.lastElementChild;
+  if(lastSide === side && last && last.classList.contains("g") && last.classList.contains(side)) return last;
+  const g = document.createElement("div"); g.className = "g " + side;
+  if(side === "bot"){ const w = document.createElement("div"); w.className = "who"; w.textContent = "云机 · 对话"; g.append(w); }
+  chatEl.append(g);
+  return g;
+}
+function say(side, text){
+  const g = group(side), b = document.createElement("div");
+  b.className = "b " + side; b.textContent = text; g.append(b);
+  lastSide = side; scrollDown();
+  requestAnimationFrame(() => {                       // 长文本折 3 行 + 展开
+    if(b.scrollHeight > 74){
+      b.classList.add("fold");
+      const u = document.createElement("button"); u.className = "unfold"; u.textContent = "展开";
+      u.addEventListener("click", () => {
+        b.classList.toggle("fold");
+        u.textContent = b.classList.contains("fold") ? "展开" : "收起";
+      });
+      g.append(u);
+    }
+  });
+  return b;
+}
+function typing(on){
+  if(on){
+    if(typingWrap) return;
+    typingWrap = document.createElement("div"); typingWrap.className = "g bot";
+    const b = document.createElement("div"); b.className = "b bot typing";
+    b.innerHTML = "<i></i><i></i><i></i>";
+    typingWrap.append(b); chatEl.append(typingWrap); lastSide = "bot"; scrollDown(true);
+  }else if(typingWrap){ typingWrap.remove(); typingWrap = null; }
+}
+function taskStart(){
+  const card = document.createElement("div"); card.className = "task";
+  card.innerHTML = '<div class="t-hd">'
+    + '<svg viewBox="0 0 24 24" style="width:9px;height:9px;stroke:#FBBF24;fill:none;stroke-width:2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
+    + '<span class="t-txt">执行中</span><span class="t-step">STEP 00 / ' + (STEP_OF || 20) + '</span></div>'
+    + '<div class="t-bar"><i></i></div><div class="t-dt">已交畀 Mobilerun，等第一步</div>';
+  chatEl.append(card); lastSide = "task"; taskCard = card; scrollDown(true);
+  return card;
+}
+function taskUpdate(st){
+  if(!taskCard) return;
+  const step = st.step || 0, of = st.of || STEP_OF || 20;
+  taskCard.querySelector(".t-step").textContent = "STEP " + String(step).padStart(2,"0") + " / " + String(of).padStart(2,"0");
+  taskCard.querySelector(".t-bar i").style.width = Math.round(100 * step / of) + "%";
+  const d = st.thought || st.action || "";
+  if(d) taskCard.querySelector(".t-dt").textContent = d.slice(0, 96);
+}
+function taskFinish(ok, msg){
+  if(!taskCard){ if(msg) say("bot", msg); return; }
+  taskCard.classList.toggle("done", !!ok);
+  taskCard.classList.toggle("bad", !ok);
+  taskCard.querySelector(".t-txt").textContent = ok ? "完成" : "要人睇一眼";
+  const ico = taskCard.querySelector(".t-hd svg");
+  if(ico) ico.style.stroke = ok ? "#34D399" : "#fb7185";
+  if(msg) taskCard.querySelector(".t-dt").textContent = String(msg).slice(0, 150);
+  taskCard = null; scrollDown();
 }
 
-async function submit(){
-  const text = input.value.trim(); if(!text) return;
-  send.disabled = true; input.value = "";
-  addEvent(addTurn("你"), "", "交代", text);
-
-  const body = addTurn("云机");
-  paint({phase:"turn"});
+async function submit(forceMode, echoText){
+  const text = (echoText !== undefined ? echoText : input.value).trim();
+  if(!text) return;
+  input.value = ""; input.style.height = "auto";
+  send.disabled = true;
+  say("me", text);
+  typing(true);
+  const mode = forceMode || "auto";
   try{
-    const resp = await fetch("/turn",{method:"POST",headers:{"Content-Type":"application/json"},
-                                      body:JSON.stringify({text})});
-    if(!resp.ok){ addEvent(body,"result-no","错误","HTTP "+resp.status); return; }
+    const resp = await fetch("/turn", {method:"POST", headers:{"Content-Type":"application/json"},
+                                      body: JSON.stringify({text, mode})});
+    if(!resp.ok){ typing(false); say("bot", "服务器返 " + resp.status); return; }
     const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = "";
     while(true){
       const {value, done} = await reader.read(); if(done) break;
-      buf += dec.decode(value,{stream:true});
+      buf += dec.decode(value, {stream:true});
       const chunks = buf.split("\n\n"); buf = chunks.pop();
       for(const c of chunks){
-        let ev="message", data="";
+        let ev = "message", data = "";
         for(const line of c.split("\n")){
           if(line.startsWith("event:")) ev = line.slice(6).trim();
           else if(line.startsWith("data:")) data += line.slice(5).trim();
         }
         if(!data) continue;
-        let o={}; try{ o=JSON.parse(data); }catch(_){}
-        if(ev === "activity"){ paint(o); slowLive = false; if(o.phase === "act") refreshLive(true); }
-        else if(ev === "status")     addEvent(body,"status","状态",(o.state||"")+(o.note?" · "+o.note:""));
-        else if(ev === "progress"){ /* 过程图已表达 */ }
-        else if(ev === "needs_human")addEvent(body,"human","要人",o.reason||"");
-        else if(ev === "result"){ paint({phase:o.success?"done":"human"});
-          refreshLive(true);            // 最后一帧
-          slowLive = true;              // 之后降到 8 秒一帧
-          addEvent(body, o.success?"result-ok":"result-no", "", o.message||""); }
+        let o = {}; try{ o = JSON.parse(data); }catch(_){}
+        if(ev === "intent"){
+          if(o.mode === "task"){ typing(false); chip("<b>1 条任务</b> · 交畀 Mobilerun"); taskStart(); paint({phase:"turn"}); }
+        }else if(ev === "chat"){
+          typing(false); paint({phase:"idle"}); say("bot", o.text || "（冇回应）");
+        }else if(ev === "clarify"){
+          typing(false); paint({phase:"idle"});
+          const g = document.createElement("div"); g.className = "g bot";
+          const w = document.createElement("div"); w.className = "who"; w.textContent = "云机 · 对话"; g.append(w);
+          const b = document.createElement("div"); b.className = "b bot";
+          b.textContent = o.question || "想我帮你做，定系问下？"; g.append(b);
+          const picks = document.createElement("div"); picks.className = "picks";
+          (o.options || []).forEach(op => {
+            const btn = document.createElement("button"); btn.className = "pick"; btn.textContent = op.label;
+            btn.addEventListener("click", () => { picks.remove(); submit(op.mode, text); });
+            picks.append(btn);
+          });
+          g.append(picks); chatEl.append(g); lastSide = "bot"; scrollDown(true);
+        }else if(ev === "activity"){
+          typing(false); if(!taskCard) taskStart(); taskUpdate(o); paint(o);
+          if(o.phase === "act") refreshLive(true);
+        }else if(ev === "needs_human"){
+          typing(false);
+        }else if(ev === "result"){
+          typing(false); paint({phase:o.success ? "done" : "human"});
+          refreshLive(true); slowLive = true;
+          taskFinish(!!o.success, o.message);
+        }
+        /* status / trajectory / progress：过程图已表达，唔再刷屏 */
       }
     }
-  }catch(e){ addEvent(body,"result-no","出错",String(e)); paint({phase:"idle"}); }
-  finally{ send.disabled=false; input.focus(); refreshStatus(); }
+  }catch(e){
+    typing(false); say("bot", "出错：" + e); paint({phase:"idle"});
+  }finally{
+    send.disabled = false; input.focus(); refreshStatus();
+  }
 }
 
-send.addEventListener("click", submit);
+send.addEventListener("click", () => submit());
+input.addEventListener("input", () => {
+  input.style.height = "auto";
+  input.style.height = Math.min(96, input.scrollHeight) + "px";
+});
+$("plus").addEventListener("click", () => chip("附件 · 未接"));
+$("mic").addEventListener("click", () => chip("语音 · 未接"));
 // 回车发送；Shift+回车换行；输入法拣字中唔抢
 input.addEventListener("keydown", e => {
   if(e.key !== "Enter" || e.shiftKey) return;
