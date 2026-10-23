@@ -421,7 +421,10 @@
   .ch-id b{font-size:9.5px;font-weight:600;display:block}
   .ch-id small{font:6.5px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.7px;color:var(--soft);display:block}
   .ch-dot{width:4px;height:4px;border-radius:50%;background:#34D399;box-shadow:0 0 6px #34D399}
-  .ch-more{margin-left:auto;font:11px/1 ui-monospace,Menlo,monospace;color:var(--soft)}
+  .ch-more{font:11px/1 ui-monospace,Menlo,monospace;color:var(--soft);margin-left:4px}
+  .ch-clear{margin-left:auto;font:7px/1 ui-monospace,Menlo,monospace;letter-spacing:.6px;color:var(--soft);
+    background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;padding:3px 8px;cursor:pointer}
+  .ch-clear:hover{color:#bfe9ff;border-color:rgba(125,211,252,.34)}
 
   .chat{flex:1 1 0;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:9px;padding:2px 2px 4px}
   .chat::-webkit-scrollbar{width:6px}
@@ -594,6 +597,7 @@
       <span class="ch-av"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>
       <div class="ch-id"><b>云机 · QPhone</b><small id="chatSub">ANDROID 13 · 10532</small></div>
       <i class="ch-dot" id="chDot"></i>
+      <button class="ch-clear" id="chClear" title="清空会话">清空</button>
       <span class="ch-more">⋯</span>
     </div>
     <div class="chat" id="chat"></div>
@@ -869,6 +873,13 @@ input.addEventListener("input", () => {
   input.style.height = "auto";
   input.style.height = Math.min(96, input.scrollHeight) + "px";
 });
+$("chClear").addEventListener("click", async () => {
+  try{
+    await fetch("/history/clear", {method:"POST"});
+    chatEl.innerHTML = ""; lastSide = null; taskCard = null; lastTaskCardEl = null; typingWrap = null;
+    chip("会话已清空"); paint({phase:"idle"});
+  }catch(e){ chip("清空失败：" + e); }
+});
 $("plus").addEventListener("click", () => chip("附件 · 未接"));
 $("mic").addEventListener("click", () => chip("语音 · 未接"));
 // 回车发送；Shift+回车换行；输入法拣字中唔抢
@@ -923,11 +934,16 @@ function renderHist(it){
     taskCard = null;                       // 历史卡唔再接手实时更新
   }
 }
+function emptyHint(){
+  if(chatEl.children.length) return;
+  chip("开始一句交代，或者问下嘢");
+}
 async function loadHistory(){
   try{
     const h = await (await fetch("/history", {cache:"no-store"})).json();
     if(h.of) STEP_OF = h.of;
     (h.items || []).forEach(renderHist);
+    emptyHint();
     paint(h.state || {phase:"idle"});
   }catch(_){ paint({phase:"idle"}); }
 }

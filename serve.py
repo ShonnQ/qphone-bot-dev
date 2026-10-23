@@ -868,6 +868,12 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": False, "error": "唔识呢条路径"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/history/clear":
+            with HIST_LOCK:
+                n = len(HISTORY); HISTORY.clear()
+            CURRENT_TASK["id"] = ""
+            LAST_RESULT.update(ok=None, msg="", ts=0.0)
+            return self._send_json({"ok": True, "cleared": n})
         if self.path != "/turn":
             return self._send_json({"ok": False, "error": "唔识呢条路径"}, 404)
         length = int(self.headers.get("Content-Length") or 0)
