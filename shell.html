@@ -166,6 +166,7 @@
     box-shadow:0 10px 26px -14px #dc2626}
   #send:hover{background:linear-gradient(140deg,#f05252,#c02626)}
   #send:disabled{opacity:.45;cursor:default;box-shadow:none}
+  #liveAge.stale{color:#FBBF24}
   @media (max-width:640px){
     .link{flex:0 0 18px;min-width:18px;max-width:none}
     .flow{row-gap:14px}
@@ -288,8 +289,11 @@
          border:1px solid rgba(125,211,252,.32);
          border-radius:4px;overflow:hidden;background:#05070a}
   .livepanel .phone img{width:100%;height:100%;object-fit:cover;display:block}
-  .livepanel .off{position:absolute;inset:0;display:none;place-items:center;color:#9fb3c4;
-       font:7.5px/1 ui-monospace,Menlo,monospace;background:rgba(0,0,0,.62)}
+  .livepanel .off{position:absolute;inset:0;display:none;place-content:center;justify-items:center;gap:5px;
+       color:#9fb3c4;font:7.5px/1 ui-monospace,Menlo,monospace;background:rgba(3,6,10,.72);
+       text-align:center;padding:0 10px}
+  .livepanel .off b{font-size:8.5px;color:#FBBF24;letter-spacing:.6px}
+  .livepanel .off small{font-size:6.8px;color:#8fa3b6;line-height:1.5}
   .livepanel .off.show{display:grid}
   .live-foot{display:flex;justify-content:space-between;font:6.38px/1.4 ui-monospace,Menlo,monospace;color:var(--soft)}
   @media (min-width:1180px){ .layout{grid-template-columns:minmax(0,1fr) 252px} }
@@ -423,6 +427,7 @@
   .ch-id b{font-size:9.5px;font-weight:600;display:block}
   .ch-id small{font:6.5px/1.4 ui-monospace,Menlo,monospace;letter-spacing:.7px;color:var(--soft);display:block}
   .ch-dot{width:4px;height:4px;border-radius:50%;background:#34D399;box-shadow:0 0 6px #34D399}
+  .ch-dot.off{background:var(--no);box-shadow:0 0 6px var(--no)}
   .ch-more{font:11px/1 ui-monospace,Menlo,monospace;color:var(--soft);margin-left:4px}
   .ch-clear{margin-left:auto;font:7px/1 ui-monospace,Menlo,monospace;letter-spacing:.6px;color:var(--soft);
     background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;padding:3px 8px;cursor:pointer}
@@ -613,7 +618,7 @@
   <div class="lp-head"><i class="ldot" id="ldot"></i><b>云机实况</b><span id="liveRes">—</span></div>
   <div class="phone">
     <img id="liveImg" alt="云机画面">
-    <div class="off" id="liveOff">云机离线</div>
+    <div class="off" id="liveOff"><b>云机离线</b><small id="liveOffSub">画面系旧帧</small></div>
   </div>
   <div class="live-foot"><span id="liveAge">—</span><span>720×1600</span></div>
 </aside>
@@ -704,12 +709,13 @@ async function refreshStatus(){
   try{
     const s = await (await fetch("/status",{cache:"no-store"})).json();
     dot.className = s.booted ? "on" : "off";
-    meta.textContent = s.target || "未连云机";
+    meta.textContent = s.booted ? (s.target || "已连云机") : ("云机离线" + (s.target ? " · " + s.target : ""));
+    meta.title = s.note || "";
     const hp = $("hopPort");
     if(hp && s.target) hp.textContent = "tcp " + s.target.split(":")[1];
   }catch(e){ dot.className="off"; meta.textContent="服务未跑"; }
 }
-refreshStatus(); setInterval(refreshStatus, 20000);
+refreshStatus(); setInterval(refreshStatus, 8000);
 fetch("/health").then(r=>r.json()).then(h=>{
   if(!h.model) return;
   const short = String(h.model).split("/").pop();          // workbuddy/deepseek-v4.1-flash -> deepseek-v4.1-flash
@@ -856,6 +862,13 @@ async function submit(forceMode, echoText){
           if(o.phase === "act") refreshLive(true);
         }else if(ev === "needs_human"){
           typing(false);
+          if(!taskCard){                          // 未开跑就失败（例如云机未就绪）：至少讲一声
+            const g = document.createElement("div"); g.className = "g bot";
+            const w = document.createElement("div"); w.className = "who"; w.textContent = "云机 · 系统"; g.append(w);
+            const b = document.createElement("div"); b.className = "b bot";
+            b.textContent = "⚠️ " + (o.reason || "要人睇一眼"); g.append(b);
+            chatEl.append(g); lastSide = "bot"; scrollDown(true);
+          }
         }else if(ev === "result"){
           typing(false); paint({phase:o.success ? "done" : "human"});
           refreshLive(true); slowLive = true;
@@ -994,8 +1007,22 @@ async function refreshLive(force){
     if(liveURL) URL.revokeObjectURL(liveURL);
     liveURL = url; liveImg.src = url;
     $("liveRes").textContent = probe.naturalWidth + "×" + probe.naturalHeight;
-    $("liveAge").textContent = new Date().toLocaleTimeString("zh-HK", {hour12:false});
-    liveOff.classList.remove("show"); ldot.classList.add("on");
+    // 帧龄：>6s 视为旧帧（云机可能断线，因为落盘缓存仲画得出嘢）
+    const age = parseFloat(r.headers.get("X-Frame-Age") || "0");
+    const ageEl = $("liveAge");
+    const stale = age >= 6;
+    if(stale){
+      ageEl.textContent = "旧帧 " + (age < 60 ? Math.round(age) + "s" : Math.round(age / 60) + "m");
+      ageEl.classList.add("stale");
+      const dur = age < 60 ? Math.round(age) + " 秒" : Math.round(age / 60) + " 分钟";
+      $("liveOffSub").textContent = "画面冻结 " + dur + " · 等云机重连";
+    }else{
+      ageEl.textContent = new Date().toLocaleTimeString("zh-HK", {hour12:false});
+      ageEl.classList.remove("stale");
+    }
+    liveOff.classList.toggle("show", stale);
+    ldot.classList.toggle("on", !stale);
+    const cd = $("chDot"); if(cd) cd.classList.toggle("off", stale);
     if(lb && lb.classList.contains("show")) lbImg.src = url;
   }catch(e){ liveOff.classList.add("show"); ldot.classList.remove("on"); }
   finally{ clearTimeout(kill); liveBusy = false; }
