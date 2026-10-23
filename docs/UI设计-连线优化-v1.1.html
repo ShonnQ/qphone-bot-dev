@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>QPhone · 连线优化 UI 设计 v1.1</title>
+<style>
+  :root{
+    color-scheme:dark;
+    --bg:#080a0e;--panel:#0e131a;--panel2:#121821;--fg:#eef2f7;--soft:#9aa8b8;
+    --line:rgba(255,255,255,.10);--wire:rgba(255,255,255,.22);
+    --acc1:#7dd3fc;--acc2:#a78bfa;--amber:#FBBF24;--ok:#34D399;
+    --mac:#7dd3fc;--cloud:#34D399;
+  }
+  *{box-sizing:border-box}
+  body{margin:0 auto;max-width:1180px;padding:26px 22px 70px;background:var(--bg);color:var(--fg);
+    font:14px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+  h1{font-size:20px;margin:0 0 4px}
+  h2{font-size:15px;margin:30px 0 10px;color:var(--acc1);letter-spacing:.2px}
+  h3{font-size:13px;margin:18px 0 6px;color:var(--fg)}
+  p{margin:6px 0;color:#cfd8e3}
+  .sub{color:var(--soft);font-size:12.5px;margin:0 0 18px}
+  table{width:100%;border-collapse:collapse;margin:8px 0 12px;font-size:12.5px}
+  th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+  th{background:rgba(125,211,252,.08);font-weight:600;white-space:nowrap}
+  td:first-child{white-space:nowrap;color:var(--acc1);font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:rgba(255,255,255,.06);
+    padding:1px 5px;border-radius:4px}
+  ul{margin:6px 0 6px 18px;padding:0}
+  li{margin:3px 0;color:#cfd8e3}
+
+  /* ===== mock 区域 ===== */
+  .mock{border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:12px 0 6px;
+    background:
+      radial-gradient(700px 240px at 18% -30%,rgba(125,211,252,.10),transparent 70%),
+      radial-gradient(600px 220px at 92% -20%,rgba(167,139,250,.08),transparent 70%),
+      linear-gradient(180deg,var(--panel),#0a0e13);
+    overflow-x:auto}
+  .cap{font-size:11.5px;color:var(--soft);margin:2px 0 0}
+  .cap b{color:var(--fg);font-weight:600}
+
+  /* 节点（简化自真壳） */
+  .rail{display:flex;align-items:center;flex-wrap:nowrap;min-width:760px}
+  .grp{border:1px dashed rgba(255,255,255,.14);border-radius:10px;padding:9px 10px 8px;position:relative}
+  .grp>i{position:absolute;top:-8px;left:10px;font:7.5px/1 ui-monospace,Menlo,monospace;
+    letter-spacing:1px;color:var(--soft);background:var(--bg);padding:0 5px;font-style:normal}
+  .row{display:flex;align-items:center;gap:0}
+  .n{display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;
+    background:linear-gradient(180deg,var(--panel2),var(--panel));position:relative;white-space:nowrap}
+  .n b{font-size:10.5px;font-weight:600;color:var(--fg)}
+  .n small{display:block;font-size:7.5px;color:var(--soft);line-height:1.3}
+  .n .ix{position:absolute;right:4px;top:2px;font:6.5px/1 ui-monospace,Menlo,monospace;color:var(--soft);opacity:.75}
+  .ic{width:13px;height:13px;border-radius:3px;border:1px solid rgba(255,255,255,.2);flex:0 0 auto}
+  .ic.mac{border-color:rgba(125,211,252,.7);background:rgba(125,211,252,.18)}
+  .ic.cloud{border-color:rgba(52,211,153,.7);background:rgba(52,211,153,.18)}
+  .ic.cmd{border-color:rgba(255,255,255,.35);background:rgba(255,255,255,.10)}
+  .n.hot{border-color:var(--amber);box-shadow:inset 0 0 0 2px var(--amber)}
+
+  /* ============ 旧做法（现况） ============ */
+  .old-wire{flex:1 1 40px;min-width:26px;height:0;border-top:1px solid var(--wire);position:relative}
+  .old-wire.dash{border-top-style:dashed}
+  .old-wire .lab{position:absolute;left:50%;top:-9px;transform:translateX(-50%);
+    font:7px/1 ui-monospace,Menlo,monospace;color:var(--soft);letter-spacing:.5px;white-space:nowrap}
+  .old-wire .lab2{position:absolute;left:50%;top:4px;transform:translateX(-50%);
+    font:6.5px/1 ui-monospace,Menlo,monospace;color:var(--soft);letter-spacing:.4px;white-space:nowrap}
+  .old-wire.grad{border:0;height:2px;background:linear-gradient(90deg,var(--acc1),var(--acc2))}
+
+  /* ============ 新做法（v1.1） ============ */
+  /* 线：1px 实线 + 端箭头，锚点插住节点 */
+  .w{flex:1 1 46px;min-width:34px;height:1px;background:var(--wire);position:relative;margin:0 2px}
+  .w::after{content:"";position:absolute;right:-1px;top:-2.5px;width:4px;height:6px;
+    background:var(--wire);clip-path:polygon(0 0,100% 50%,0 100%)}
+  .w.dash{background:none;border-top:1px dashed var(--wire);height:0}
+  .w.dash::after{top:-3.5px}
+  .w .tag{position:absolute;left:50%;top:0;transform:translate(-50%,-50%);
+    font:7.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.8px;color:#cfd8e3;
+    background:#0b1017;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:2px 7px;white-space:nowrap}
+  .w.dash .tag{color:#bfe9ff;border-color:rgba(125,211,252,.28)}
+  .w.live{height:2px;background:var(--amber);box-shadow:0 0 10px -3px rgba(251,191,36,.8)}
+  .w.live::after{background:var(--amber);top:-2px}
+  .w.live .tag{color:#161104;background:var(--amber);border-color:var(--amber);font-weight:600}
+  .w.mute{opacity:.28}
+
+  /* 锚点：节点两侧的环 */
+  .n::before,.n::after{content:"";position:absolute;top:50%;width:5px;height:5px;border-radius:50%;
+    background:#0b1017;border:1px solid var(--wire);transform:translateY(-50%)}
+  .n::before{left:-3px}
+  .n::after{right:-3px}
+  .n.hot::before,.n.hot::after{border-color:var(--amber)}
+
+  /* 跨机段：虚线 + 中灰 + 双向箭头 */
+  .w.bi::before{content:"";position:absolute;left:-1px;top:-3.5px;width:4px;height:6px;
+    background:var(--wire);clip-path:polygon(100% 0,0 50%,100% 100%)}
+
+  /* 垂直段（模型挂在 Mac 框下） */
+  .vc{display:flex;flex-direction:column;align-items:center;gap:0;margin-top:6px}
+  .vc .bar{width:1px;height:12px;border-left:1px dashed var(--wire)}
+  .vc .tag{font:7.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.8px;color:#bfe9ff;
+    background:#0b1017;border:1px solid rgba(125,211,252,.28);border-radius:9px;padding:2px 7px}
+
+  /* 规则卡 */
+  .rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:12px;margin:10px 0}
+  .rule{border:1px solid var(--line);border-radius:11px;padding:12px 14px;background:rgba(255,255,255,.02)}
+  .rule .h{font-size:12px;color:var(--acc1);font-weight:600;margin:0 0 4px}
+  .rule p{margin:0;font-size:12px;color:#c6d0dc}
+  .bad{color:#fca5a5}
+  .good{color:var(--ok)}
+</style>
+</head>
+<body>
+
+<h1>QPhone 壳 · 连线优化设计 v1.1</h1>
+<p class="sub">结构不动，只重做「线」这一层：统一语法、加锚点与箭头、活跃链路一致性。此稿只看唔改代码。</p>
+
+<h2>1 · 现况诊症：点解睇落乱</h2>
+<table>
+  <tr><th>问题</th><th>现况</th><th>为何睇落乱</th></tr>
+  <tr><td>线型唔统一</td><td>主线 1px 实线、ADB 段虚线、`#l1` 长线带浮字、模型段竖虚线、活跃段渐变 2px</td><td>一条流程里有 <b>4 种线</b>，大脑要重新学每种含义</td></tr>
+  <tr><td>标签贴线</td><td>`交代 · PROMPT`、`ADB ⇄ tcp 10532`、`HTTPS ⇄ api.x.ai` 都系裸字浮在线上面</td><td>字同线抢位，细字被线割开；三段字大小/位置各唔同</td></tr>
+  <tr><td>线穿框</td><td>线直接顶到节点边框，冇入口</td><td>睇唔清边度系「入」边度系「出」，尤其 Mac/云机两个虚线框之间</td></tr>
+  <tr><td>冇方向</td><td>纯横线，冇箭头</td><td>要读字先知流向；跨机段（ADB）双向，但画成单向直线</td></tr>
+  <tr><td>活跃态唔一致</td><td>节点黄框，但连线变蓝紫渐变</td><td>同一件事用两种颜色语言，视线被拉去渐变线</td></tr>
+  <tr><td>窄窗换行</td><td>换行后线长短唔一，云机组掉第二行时线悬空</td><td>线断在半空，睇落似错误</td></tr>
+</table>
+
+<h3>现况 mock（示意）</h3>
+<div class="mock">
+  <div class="rail">
+    <div class="n"><b>你</b><small>讲一句</small></div>
+    <div class="old-wire"><span class="lab">交代 · PROMPT</span></div>
+    <div class="grp"><i>MAC 本机</i>
+      <div class="row">
+        <div class="n"><b>壳</b><small>收交代</small></div>
+        <div class="old-wire grad"></div>
+        <div class="n"><b>/turn</b><small>转事件</small></div>
+        <div class="old-wire dash"><span class="lab2">ADB</span><span class="lab" style="top:-8px;color:#9aa8b8">tcp 10532</span></div>
+        <div class="n"><b>Mobilerun</b><small>睇屏规划</small></div>
+      </div>
+    </div>
+    <div class="old-wire dash"></div>
+    <div class="grp"><i>云机 · ANDROID 13</i>
+      <div class="row">
+        <div class="n"><b>Portal</b><small>落到动作</small></div>
+        <div class="old-wire"></div>
+        <div class="n"><b>云机 UI</b><small>被点组件</small></div>
+      </div>
+    </div>
+  </div>
+  <p class="cap"><b>问题睇得见：</b>ADB 段挤在 Mac 框内（实际跨机），标签叠两层、大小唔一，线到框边即止，活跃段变蓝紫渐变。</p>
+</div>
+
+<h2>2 · 规则（v1.1 定稿）</h2>
+<div class="rules">
+  <div class="rule"><p class="h">① 一条语法：实线＝本机，虚线＝跨机</p><p>框内（同一进程/同一台机）一律 1px 实线；跨进程或跨机（ADB、HTTPS）一律 1px 虚线。虚线只做呢两件事。</p></div>
+  <div class="rule"><p class="h">② 锚点插住，唔穿框</p><p>每个节点左右各一个 5px 环状锚点，线只接到环上；线与框留 6px。睇得清「入／出」。</p></div>
+  <div class="rule"><p class="h">③ 箭头讲流向</p><p>每段线右端 4×6px 小三角；双向段（ADB ⇄、HTTPS ⇄）两端都有。</p></div>
+  <div class="rule"><p class="h">④ 标签入 pill</p><p>所有线标签统一：`.tag` pill（7.5px、字距 .8、圆角 9px、底色 `#0b1017`），骑在线中，唔再浮字。</p></div>
+  <div class="rule"><p class="h">⑤ 活跃＝琥珀，同节点同色</p><p>活跃链路 2px `#FBBF24` + 轻外发光；节点也是琥珀 2px。唔再出现蓝紫渐变。</p></div>
+  <div class="rule"><p class="h">⑥ 非活跃降噪</p><p>run 中未走的线 `opacity:.28`；走完回满。</p></div>
+  <div class="rule"><p class="h">⑦ 跨机段独立成段</p><p>ADB 段从 Mac 框拉出来，做成 Mac 框与云机框之间的<b>独立小段</b>（虚线 + 双向箭头 + `ADB ⇄ tcp 10532` pill），唔再塞入 Mac 框。</p></div>
+  <div class="rule"><p class="h">⑧ 纵向只用一条</p><p>模型连 Mobilerun 是唯一纵向段：竖虚线 12px + pill，其余全部横向，避免斜线。</p></div>
+</div>
+
+<h2>3 · 新主画面（静态 mock）</h2>
+<div class="mock">
+  <div class="rail">
+    <div class="n"><b>你</b><small>讲一句</small></div>
+    <div class="w"><span class="tag">PROMPT</span></div>
+    <div class="grp"><i>MAC 本机</i>
+      <div class="row">
+        <div class="n"><b>壳</b><small>收交代</small></div>
+        <div class="w"></div>
+        <div class="n"><b>/turn</b><small>转事件</small></div>
+      </div>
+      <div class="vc">
+        <div class="bar"></div>
+        <span class="tag">HTTPS ⇄ api.x.ai</span>
+        <div class="bar" style="height:8px"></div>
+        <div class="n" style="margin-top:2px"><b>DeepSeek V4.1</b><small>远程 · 每步问一次</small></div>
+      </div>
+    </div>
+    <div class="w dash bi"><span class="tag">ADB ⇄ tcp 10532</span></div>
+    <div class="n"><b>Mobilerun</b><small>睇屏规划</small></div>
+    <div class="w"></div>
+    <div class="grp"><i>云机 · ANDROID 13</i>
+      <div class="row">
+        <div class="n"><b>Portal</b><small>落到动作</small></div>
+        <div class="w"></div>
+        <div class="n"><b>云机 UI</b><small>被点组件</small></div>
+      </div>
+    </div>
+  </div>
+  <p class="cap">关键改动：<b>①</b> 标签全部入 pill 骑线；<b>②</b> 节点两侧有锚点，线唔穿框；<b>③</b> ADB 变成 Mac 与云机之间的独立虚线双向段；<b>④</b> 模型段是唯一纵向虚线。</p>
+</div>
+
+<h2>4 · 运行中状态（生效示意）</h2>
+<div class="mock">
+  <div class="rail">
+    <div class="n"><b>你</b><small>讲一句</small></div>
+    <div class="w live"><span class="tag">PROMPT</span></div>
+    <div class="grp"><i>MAC 本机</i>
+      <div class="row">
+        <div class="n"><b>壳</b><small>收交代</small></div>
+        <div class="w live"></div>
+        <div class="n"><b>/turn</b><small>转事件</small></div>
+      </div>
+    </div>
+    <div class="w dash mute"><span class="tag">ADB ⇄ tcp 10532</span></div>
+    <div class="n hot"><b>Mobilerun</b><small>睇屏规划</small></div>
+    <div class="w mute"></div>
+    <div class="grp"><i>云机 · ANDROID 13</i>
+      <div class="row">
+        <div class="n"><b>Portal</b><small>落到动作</small></div>
+        <div class="w mute"></div>
+        <div class="n"><b>云机 UI</b><small>被点组件</small></div>
+      </div>
+    </div>
+  </div>
+  <p class="cap">跑到 Mobilerun 时：<b>已走过</b>的线转 2px 琥珀（同节点黄框一色），<b>未走</b>的降到 28% 不透明度；一眼睇到进度位置，唔需要读字。</p>
+</div>
+
+<h2>5 · 规格表（落地用）</h2>
+<table>
+  <tr><th>项</th><th>值</th><th>说明</th></tr>
+  <tr><td>线宽 / 实线</td><td>1px，`rgba(255,255,255,.22)`</td><td>框内同机</td></tr>
+  <tr><td>线宽 / 虚线</td><td>1px dashed 同色</td><td>ADB、HTTPS 专用</td></tr>
+  <tr><td>活跃线</td><td>2px `#FBBF24` + `0 0 10px -3px` 光</td><td>与节点黄框一致</td></tr>
+  <tr><td>非活跃</td><td>opacity .28</td><td>run 中有效</td></tr>
+  <tr><td>箭头</td><td>4×6px 三角，右端；双向加左端</td><td>clip-path 画</td></tr>
+  <tr><td>锚点</td><td>5px 环，`#0b1017` 底 + 1px 边</td><td>节点 `::before/::after`</td></tr>
+  <tr><td>线与框间距</td><td>6px</td><td>由锚点吸收</td></tr>
+  <tr><td>标签 pill</td><td>7.5px / 字距 .8 / 圆角 9 / `padding 2px 7px`</td><td>底色 `#0b1017`，边 `rgba(255,255,255,.12)`</td></tr>
+  <tr><td>虚线标签</td><td>字色 `#bfe9ff`，边 `rgba(125,211,252,.28)`</td><td>跨机专属色</td></tr>
+  <tr><td>纵向段</td><td>12px 竖虚线 + pill</td><td>只用于模型</td></tr>
+  <tr><td>换行</td><td>窄窗时线缩到 34px 后整段换行，唔留悬空线</td><td>同现行为一致</td></tr>
+</table>
+
+<h2>6 · 落地清单（改边度）</h2>
+<table>
+  <tr><th>选择器</th><th>动作</th></tr>
+  <tr><td><code>.link</code></td><td>合并成 `.w`：1px 实线 + 右端箭头；删 `border-top: dashed` 双实现</td></tr>
+  <tr><td><code>.link.on</code></td><td>由蓝紫渐变改 2px `#FBBF24`；`::after` 流动圆点删走</td></tr>
+  <tr><td><code>#l1:after</code></td><td>`交代 · PROMPT` 裸字 → 统一 `.tag` pill</td></tr>
+  <tr><td><code>.hop</code> / <code>.hop em</code> / <code>.hop .port</code></td><td>并入 `.w.dash.bi` + 单一 pill `ADB ⇄ tcp 10532`；删端口两行小字</td></tr>
+  <tr><td><code>.mcomms</code></td><td>保留纵向结构，线改 12px 竖虚线 + pill `HTTPS ⇄ api.x.ai`</td></tr>
+  <tr><td><code>.n</code></td><td>加 `::before/::after` 锚点；hot 时锚点转琥珀</td></tr>
+  <tr><td><code>@media (max-width:1100px)</code></td><td>窄窗：线缩 34px、标签 pill 保留、云机组换行后补垂直短线</td></tr>
+</table>
+
+<p class="cap">确认呢版方向 → 我照落地清单改 <code>shell.html</code>，并实测 1600 / 1440 / 1280 / 430 四档对齐，再交你复验。</p>
+
+</body>
+</html>

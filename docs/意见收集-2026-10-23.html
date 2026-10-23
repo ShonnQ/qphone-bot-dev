@@ -1,0 +1,45 @@
+<!DOCTYPE html><html lang="zh-Hans"><head><meta charset="utf-8"><title>QPhone 壳 UI · 意见收集 2026-10-23</title><style>
+:root{color-scheme:dark;--bg:#080a0e;--panel:#10151c;--fg:#eef2f7;--soft:#94a3b8;--line:rgba(255,255,255,.12);--acc:#7dd3fc}
+*{box-sizing:border-box}
+body{margin:0 auto;max-width:1280px;padding:24px 20px 60px;background:var(--bg);color:var(--fg);
+ font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+h1{font-size:21px;margin:0 0 6px}
+h2{font-size:16px;margin:26px 0 8px;color:var(--acc);letter-spacing:.3px}
+h3{font-size:14px;margin:18px 0 6px}
+p{margin:6px 0}p.li{margin:3px 0 3px 16px}
+blockquote{margin:10px 0;padding:8px 14px;border-left:3px solid var(--acc);
+ background:rgba(125,211,252,.08);font-size:14px;color:var(--soft)}
+table{width:100%;border-collapse:collapse;margin:8px 0 4px;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+th{background:rgba(125,211,252,.09);font-weight:600;white-space:nowrap}
+td:first-child{white-space:nowrap;color:var(--acc);font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+td:last-child{white-space:nowrap}
+</style></head><body>
+<h1>QPhone 壳 UI · 老板意见收集（2026-10-23）</h1>
+<blockquote>规则：**先记录，收集齐先统一改**。呢份表系唯一清单，未入表嘅口头改动一律唔做。</blockquote>
+<blockquote>状态：`未改` / `已改`（等你复验） / `已撤`（你叫撤回） / `待确认`</blockquote>
+<h2>A. 布局结构</h2>
+<table><thead><tr><th>#</th><th>你嘅原话 / 意思</th><th>具体要求</th><th>现况</th><th>状态</th></tr></thead><tbody><tr><td>A1</td><td>「云机实录单独一个区域展示啊，不用柔到组件里面一起导致这种问题」</td><td>云机实况独立成一个区域，唔好同过程图共用一个框</td><td>已拆 `board` + `livepanel` 两个区域</td><td>已改</td></tr><tr><td>A2</td><td>「我估就唔会搞成咁」</td><td>两区各自独立，互不影响尺寸</td><td>同上</td><td>已改</td></tr><tr><td>A3</td><td>「只保留主界面就得」</td><td>设计稿精简，唔要状态变体图</td><td>设计稿只留主画面 + 规格 + 落地顺序</td><td>已改</td></tr><tr><td>A4</td><td>「上面流程图噶模块，位置再摆放得科学滴啦」</td><td>流程图模块位置排得合理（Mac 区 / 云机区）</td><td>flow 铺满、左右留白 21/21</td><td>已改（可再调）</td></tr><tr><td>A5</td><td>「个流程图，那个组件在 mac，那个组件在云机里面，要框好」</td><td>Mac 本机 / 云机 Android 两个虚线框标清楚归属</td><td>两个 `.grp` 虚线框 + 标签</td><td>已改</td></tr></tbody></table>
+<h2>B. 云机实况窗</h2>
+<table><thead><tr><th>#</th><th>你嘅原话 / 意思</th><th>具体要求</th><th>现况</th><th>状态</th></tr></thead><tbody><tr><td>B1</td><td>「最右边加个云机实况就得」</td><td>最右边一栏放云机实时画面</td><td>`/screen.png` 轮询 + 竖窗</td><td>已改</td></tr><tr><td>B2</td><td>「点解云机那个框 一大块黑的？」</td><td>唔可以有黑块</td><td>根因：`.grp.phone` 撞 `.phone` 选择器，已收窄到 `.live .phone`</td><td>已改</td></tr><tr><td>B3</td><td>「云机实况再大 0.5 倍」</td><td>实况窗再放大 50%</td><td>378px 宽，画面 340×756</td><td>已改</td></tr></tbody></table>
+<h2>C. 尺寸与字体</h2>
+<table><thead><tr><th>#</th><th>你嘅原话 / 意思</th><th>具体要求</th><th>现况</th><th>状态</th></tr></thead><tbody><tr><td>C1</td><td>「组件和云机实况都放大1.5倍啦，现在有点系，字体都系」</td><td>组件 + 字体整体放大 1.5 倍</td><td>`body{zoom:1.5}`</td><td>已改</td></tr><tr><td>C2</td><td>「字色啊屌你，咁灰点睇啊」（早前）</td><td>正文唔可以用灰，要高对比</td><td>全用 `--fg`，过 WCAG AA</td><td>已改</td></tr><tr><td>C3</td><td>「预览图字体睇唔清」（早前）</td><td>字号要够大</td><td>同上</td><td>已改</td></tr></tbody></table>
+<h2>D. 模型（远程 xAI）摆位 —— 改过三次，最后定案</h2>
+<table><thead><tr><th>#</th><th>你嘅原话 / 意思</th><th>具体要求</th><th>现况</th><th>状态</th></tr></thead><tbody><tr><td>D1</td><td>「你把远程xai，位置放到顶部系咪好滴」</td><td>曾经想搬去顶部</td><td>已撤</td><td>已撤</td></tr><tr><td>D2</td><td>「远程xai放 云机.android 13区域右边」</td><td>放云机框右边</td><td>已撤</td><td>已撤</td></tr><tr><td>D3</td><td>「其实系mac 本机的mobilerun同远程.xai 之间通信系咪？」</td><td>通信关系系 Mobilerun ⇄ xAI</td><td>—</td><td>已确认</td></tr><tr><td>D4</td><td>「将远程.xai放 mac 本机区域下面，然后做下通信连线」</td><td>放 Mac 区**下面**（框外），画通信线</td><td>模型在 Mac 框外正下方，中心对准 Mobilerun（偏差 0），虚线 + `HTTPS ⇄ api.x.ai`</td><td>已改</td></tr></tbody></table>
+<h2>E. 视觉风格</h2>
+<table><thead><tr><th>#</th><th>你嘅原话 / 意思</th><th>具体要求</th><th>现况</th><th>状态</th></tr></thead><tbody><tr><td>E1</td><td>「感觉可以，不过唔够科技，科技风一滴，个UI」</td><td>要科技风</td><td>网格底、HUD 角标、切角节点、扫光、遥测行</td><td>已改</td></tr><tr><td>E2</td><td>「默认暗黑风格吧」</td><td>默认暗黑，唔跟系统</td><td>`color-scheme: dark` 写死</td><td>已改</td></tr><tr><td>E3</td><td>「基于上一版去框啊」/「v0.7 基础上…就得啦，现在这版改到乱七八糟」</td><td>唔准自己重排/重设计，只可以在指定版本加指定一项</td><td>已写入工作纪律</td><td>纪律</td></tr></tbody></table>
+<h2>F. 交互</h2>
+<table><thead><tr><th>#</th><th>你嘅原话 / 意思</th><th>具体要求</th><th>现况</th><th>状态</th></tr></thead><tbody><tr><td>F1</td><td>「个输入框支持回车发送啦」</td><td>回车发送、Shift+回车换行</td><td>已实现（含输入法保护）</td><td>已改</td></tr><tr><td>F2</td><td>「唔需要下面那些逐步播的那些截图」</td><td>唔要逐步截图回放</td><td>已删，只留顶部动态过程图</td><td>已改</td></tr><tr><td>F3</td><td>过程图要动态显示「边个组件做紧嘢」</td><td>顶部过程图实时高亮 + 步骤 + 百分比</td><td>`/state` + `activity` 事件驱动</td><td>已改</td></tr><tr><td>F4</td><td>「点一下实况窗放大」</td><td>要唔要放大浮层</td><td>已做（Esc 关）</td><td>待确认</td></tr></tbody></table>
+<h2>G. 模型 / 引擎</h2>
+<table><thead><tr><th>#</th><th>你嘅原话 / 意思</th><th>具体要求</th><th>现况</th><th>状态</th></tr></thead><tbody><tr><td>G1</td><td>「目前睇个模型好垃圾，换Grok 4.7」</td><td>换 grok-4.7</td><td>经 `hermes proxy :8645`，`/health` 返 `grok-4.7`</td><td>已改</td></tr></tbody></table>
+<h2>H. 待你补（收集中）</h2>
+<table><thead><tr><th>#</th><th>你嘅原话</th><th>具体要求（我理解）</th><th>影响范围</th><th>状态</th></tr></thead><tbody><tr><td>H1</td><td>「界面字体等比缩小0.5倍」</td><td>所有字体按比例缩一半（×0.5）：节点标题/小字、顶栏 chip、状态行、遥测、日志、输入框提示、实况窗标题与底行</td><td>全站 `font-size` 已 ×0.5；组件框尺寸/图标/间距未缩</td><td>已撤销（H5 已还原成原尺寸）</td></tr><tr><td>H3</td><td>「组件进行中噶动效太丑样了，就正常闪烁就好，稍微改改」</td><td>去掉夸张动效，改成正常闪烁</td><td>`.n.hot` 动画 → **v3 定稿**：只有 2px 实黄内边框 `#FBBF24` 明暗闪缩（`amberblink 1.1s ease-in-out`），平面填充、无渐变/扫光/光晕/标签</td><td>已改</td></tr><tr><td>H4</td><td>「最大步骤改为20步」</td><td>`--steps` 由 10 改 20</td><td>`serve.py` STEPS / 环境变量</td><td>已改（实测 `STEP 01/20`）</td></tr><tr><td>H7</td><td>「个『讲』改为发送」</td><td>发送按钮文案 → 发送</td><td>`shell.html #send`、设计稿 `.m-send`</td><td>已改</td></tr><tr><td>H8</td><td>「按钮用红色」</td><td>发送按钮改红色渐变（`#ef4444 → #b91c1c`，白字）</td><td>同上</td><td>已改</td></tr><tr><td>H9</td><td>「启动优化」</td><td>实况帧缓存 + 落盘预热 + 事件唤醒，请求唔再阻塞等 adb</td><td>`serve.py` 帧缓存/后台抓帧器</td><td>已改（首帧 1.5s → 3ms）</td></tr><tr><td>H5</td><td>「那些字大小，变大一倍啦，现在太细了」</td><td>字体由 ×0.5 还原成原尺寸（相对细版大 1 倍）</td><td>全站字体</td><td>已改（13.5 / 19 / 9.5 / 8.5 复位）</td></tr><tr><td>H6</td><td>「个模型换番Qbridge嘅Workbuddy DeepSeek V4.1 flash」</td><td>模型换 `workbuddy/deepseek-v4.1-flash`，走 Qbridge `:7863/v1`</td><td>`serve.py`：显式 `QPHONE_LLM_URL` 优先于 proxy</td><td>已改（实测 3 步完成，0 malformed）</td></tr><tr><td>H2</td><td>「运行中的模块，样式改下，改得明显一滴」</td><td>运行中（hot）节点要更醒目：填色更实、发光更强、边框加亮、加「运行中」标签或走动条、可加脉冲</td><td>v1 太重（实色填充+双层跳动）→ v2 淡填充+柔光 → **v3 按你要求：只留黄色粗边框闪缩，删走填充/光晕/标签**</td><td>已改（v3 定稿）</td></tr></tbody></table>
+<p>---</p>
+<h3>收齐后统一改嘅顺序（建议）</h3>
+<p>1. **结构**（A / B / D）：区域划分、模型摆位、通信线</p>
+<p>2. **尺寸**（C / B3）：1.5x 基准 + 实况再 +50%</p>
+<p>3. **视觉**（E）：科技风细节、暗黑</p>
+<p>4. **交互**（F）：回车、放大、过程图联动</p>
+<p>5. **文档**（设计稿同步到最终版，避免再出现「设计稿同实作唔一致」）</p>
+<blockquote>注：以上「已改」都有实测数据；你复验唔满意就喺表内改状态为「未改」，我照表一次性重做。</blockquote>
+</body></html>

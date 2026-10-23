@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QPhone · 角色与链路结构图</title>
+<style>
+  /* 自带主题：唔依赖 app 有冇注入变量，保证字色一定对得住背景 */
+  :root{
+    color-scheme: light dark;
+    --bg:#ffffff; --fg:#0f1419; --soft:#46505a; --bd:#cbd3da; --card:#f6f8fa;
+    --acc:#0b6b7d; --ok:#15803d; --warn:#a15c07; --no:#b3261e;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14171b; --fg:#f4f6f8; --soft:#c3ccd6; --bd:#4f5862; --card:rgba(255,255,255,.07);
+      --acc:#38e0f5; --ok:#4ade80; --warn:#fbbf24; --no:#fb7185;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{background:var(--bg)}
+  body{margin:0;padding:24px 26px 34px;color:var(--fg);
+       font:16px/1.72 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+       -webkit-font-smoothing:antialiased}
+  h1{font-size:22px;margin:0 0 4px;font-weight:700;letter-spacing:.3px}
+  .sub{color:var(--soft);font-size:15px;margin-bottom:20px}
+  .sub code{color:var(--acc);font-size:14px}
+
+  .lane{position:relative;border:1px solid var(--bd);border-radius:12px;
+        background:var(--card);padding:14px 16px;display:flex;gap:16px;align-items:flex-start}
+  .lane.exec{border-style:dashed}
+  .lane .who{min-width:150px;flex:0 0 150px}
+  .lane .who b{display:block;font-size:16.5px;line-height:1.4;font-weight:700}
+  .lane .who .tag{display:inline-block;margin-top:5px;font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;
+        color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:1px 7px}
+  .lane .what{flex:1;min-width:0}
+  .lane .what .line{font-size:15px;margin:3px 0}
+  .lane .what .line.dim{color:var(--soft)}
+  .lane .what .line b{font-weight:700}
+  .lane .what .cmd{font:13.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;
+        color:var(--fg);background:rgba(127,127,127,.20);border-radius:5px;padding:1.5px 6px}
+  .state{font:13px/1.5 ui-monospace,Menlo,monospace;white-space:nowrap;margin-left:auto;padding-left:12px;font-weight:700}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .no{color:var(--no)}
+
+  .link{display:flex;align-items:stretch;gap:12px;padding:0 0 0 174px;margin:9px 0}
+  .link .bar{width:2px;background:var(--bd);flex:0 0 2px}
+  .link .lbl{font-size:14.5px;padding:3px 0;line-height:1.6}
+  .link .lbl b{color:var(--acc);font-weight:700}
+  .link .lbl i{font-style:normal;color:var(--no)}
+
+  .cap{margin:14px 0 6px;font-size:13.5px;letter-spacing:.4px;font-weight:700}
+  .split{display:flex;gap:12px;margin:8px 0;flex-wrap:wrap}
+  .split .lane{flex:1 1 300px}
+
+  .legend{display:flex;gap:22px;flex-wrap:wrap;margin:18px 0 0;font-size:14px}
+  .legend span b{font-weight:700}
+
+  table{width:100%;border-collapse:collapse;margin-top:20px;font-size:14.5px}
+  th,td{border:1px solid var(--bd);padding:9px 11px;text-align:left;vertical-align:top}
+  th{background:rgba(127,127,127,.16);font-weight:700;font-size:13.5px}
+  td code{font:13.5px ui-monospace,Menlo,monospace;color:var(--acc)}
+  .note{margin-top:18px;padding:13px 16px;border-left:3px solid var(--acc);font-size:14.5px;
+        line-height:1.78;background:rgba(127,127,127,.07);border-radius:0 8px 8px 0}
+  .note b{color:var(--acc);font-weight:700}
+
+  /* 窄 pane：直向排，避免横向溢出 */
+  @media (max-width:560px){
+    body{padding:18px 16px 26px}
+    .lane{flex-direction:column;gap:8px}
+    .lane .who{min-width:0;flex-basis:auto;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+    .lane .who .tag{margin-top:0}
+    .state{margin-left:0;padding-left:0}
+    .link{padding-left:0}
+    .cmd{white-space:normal;word-break:break-word}
+  }
+</style>
+</head>
+<body>
+
+<h1>QPhone · 角色与链路</h1>
+<div class="sub">2026-10-22 · 第一部（一部云机 · 一间虚拟机／一台租用机）· 正本 <code>~/projects/qphone-bot-dev/docs/详细设计.md</code> v0.8</div>
+
+<!-- 人 -->
+<div class="lane">
+  <div class="who"><b>人 / 老板</b><span class="tag">唯一界面</span></div>
+  <div class="what">
+    <div class="line">讲一句交代。做完或卡住才回来看。屏幕不是主界面。</div>
+  </div>
+  <div class="state ok">— 天然在</div>
+</div>
+
+<div class="link"><div class="bar"></div><div class="lbl">一句话（自然语言）</div></div>
+
+<!-- 壳 -->
+<div class="lane">
+  <div class="who"><b>壳 · 客户端</b><span class="tag">薄壳</span></div>
+  <div class="what">
+    <div class="line">只做三件事：收交代 · 显进度 · 显结果（含「要人」）。<b>不含 agent、不带电脑容器、不依赖 docker</b>。</div>
+    <div class="line dim">候选：① Telegram / Hermes 桌面顶（零开发）② 自写 Tauri / Electron 薄壳。</div>
+  </div>
+  <div class="state warn">未建 · B7</div>
+</div>
+
+<div class="link"><div class="bar"></div><div class="lbl"><b>POST /turn</b> {text}　↑　<b>SSE</b>：status · progress · needs_human · result　　<i>壳唔连 adb、唔认云机点嚟</i></div></div>
+
+<!-- /turn 服务 -->
+<div class="lane">
+  <div class="who"><b>/turn 服务</b><span class="tag">serve.py · :8777</span></div>
+  <div class="what">
+    <div class="line"><span class="cmd">GET /health</span> <span class="cmd">GET /status</span> <span class="cmd">POST /turn</span>　零依赖 stdlib。收交代 → 查云机 → 交执行 → 翻事件。</div>
+    <div class="line">云机未就绪：<span class="cmd">status{not_ready}</span> → <span class="cmd">needs_human</span> → <span class="cmd">result{success:false}</span>，唔会挂住。</div>
+  </div>
+  <div class="state ok">已实测</div>
+</div>
+
+<!-- 执行体 + 依赖 -->
+<div class="cap">控制机侧：两个执行体 + 一个依赖</div>
+<div class="split">
+  <div class="lane exec">
+    <div class="who"><b>Mobilerun</b><span class="tag">agent · Mac</span></div>
+    <div class="what">
+      <div class="line">手机原生 agent：看屏（无障碍树＋截图）、点、滑、输字、开 App、规划多步。</div>
+      <div class="line"><span class="cmd">--vision --steps N</span></div>
+    </div>
+    <div class="state ok">v0.7.0 已装</div>
+  </div>
+
+  <div class="lane exec">
+    <div class="who"><b>qphone.py</b><span class="tag">配套层</span></div>
+    <div class="what">
+      <div class="line">只做 Mobilerun 不管嘅：容器起停、开机状态、端口发现、装包、截图、包名解析。不做决策。</div>
+      <div class="line"><span class="cmd">status install launch click shot apps</span></div>
+    </div>
+    <div class="state ok">在用</div>
+  </div>
+
+  <div class="lane exec">
+    <div class="who"><b>模型后端</b><span class="tag">Qbridge :7863</span></div>
+    <div class="what">
+      <div class="line">OpenAI 兼容 <span class="cmd">/v1</span>。只有 Mobilerun 调它，qphone.py 唔碰。</div>
+      <div class="line"><span class="cmd">workbuddy/deepseek-v4.1-flash</span>（实测）<br>provider 要拣 <b>DeepSeek</b>，OpenAI 档拒自定义模型名</div>
+    </div>
+    <div class="state ok">已实测</div>
+  </div>
+</div>
+
+<div class="link"><div class="bar"></div><div class="lbl">adb　<b>127.0.0.1:10532</b>（天翼转发口，<i>每次会话都变</i>）　／　正式底座 <b>127.0.0.1:5555</b></div></div>
+
+<!-- 云机 -->
+<div class="lane">
+  <div class="who"><b>云机</b><span class="tag">Android 13</span></div>
+  <div class="what">
+    <div class="line"><b>临时</b>：天翼云手机 · <span class="cmd">Tianyi1Hao2021 / AURORA</span> · SDK 33 · arm64-v8a · 720×1600</div>
+    <div class="line"><b>正式</b>：redroid <span class="cmd">13.0.0_64only-latest</span> · x86_64 · Ubuntu VM(8G) · winx86（该机暂时未开）</div>
+    <div class="line">内里跑 <b>Portal APK 0.7.27</b>（<span class="cmd">com.mobilerun.portal</span>）：无障碍树、设备状态、执行点击。无障碍服务已自动开启。</div>
+  </div>
+  <div class="state ok">临时已通</div>
+</div>
+
+<div class="legend">
+  <span><b class="ok">✅ 已实测</b> 有真跑记录</span>
+  <span><b class="warn">⚠️ 未建/未定</b> 设计有、实现无</span>
+  <span><b class="no">✗ 明令禁止</b> 画成红线嘅路径</span>
+</div>
+
+<table>
+  <thead>
+    <tr><th style="width:15%">角色</th><th style="width:19%">系咩</th><th style="width:22%">同边个讲话</th><th>边界（做 / 唔做）</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>人 / 老板</td><td>用户</td><td>→ 壳</td><td>讲一句。唔填端口、唔理 adb</td></tr>
+    <tr><td>壳</td><td>薄壳客户端</td><td>→ <code>/turn</code>；收 SSE</td><td>只发交代收结果。<b>唔连 adb</b>、<b>唔带 agent</b>、唔装 docker</td></tr>
+    <tr><td><code>/turn</code> 服务</td><td><code>serve.py</code> :8777</td><td>→ Mobilerun、<code>qphone.py</code></td><td>只翻译与转发。唔自己做决策、唔自己点屏</td></tr>
+    <tr><td>Mobilerun</td><td>手机原生 agent（Mac）</td><td>→ Portal（adb）、→ 模型</td><td>负责「点」与「看」。唔管容器、唔管端口</td></tr>
+    <tr><td><code>qphone.py</code></td><td>adb 配套层</td><td>→ 云机（adb）</td><td>容器 / 状态 / 装包 / 截图。<b>唔做决策</b>、唔调模型</td></tr>
+    <tr><td>Portal APK</td><td>云机内应用</td><td>被 Mobilerun 调</td><td>提供无障碍树与动作执行。唔放业务逻辑</td></tr>
+    <tr><td>云机</td><td>Android 13 实例</td><td>被 adb 操作</td><td>只知道 adb。<b>唔向壳提供画面或控制入口</b></td></tr>
+    <tr><td>模型后端</td><td>Qbridge :7863/v1</td><td>被 Mobilerun 调</td><td>只解题。唔接触设备</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <b>三条红线</b>：① 壳 ↔ 云机之间冇直连，画面唔回流（要人时人去云机侧睇屏）；② 唔可以两层 agent 串埋（壳自带 agent 再叫 Mobilerun = token 双花、出错分唔清边层）—— Rakazo 与 dsh 桌面就系因此被否；③ 执行只发生在控制程序一侧，换云机（容器 ↔ 租用实例）只改控制程序，壳一行唔动。
+</div>
+
+</body>
+</html>

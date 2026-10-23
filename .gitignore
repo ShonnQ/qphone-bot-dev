@@ -1,0 +1,16 @@
+# 运行产物，唔入 git
+trajectories/
+*.log
+/tmp/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# 密钥 / 本机配置
+.env
+*.key
+
+# macOS
+.DS_Store

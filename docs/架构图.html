@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QPhone 结构</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #020617;
+    color: #e2e8f0;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+  header { padding: 28px 32px 8px; }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: 0.02em; }
+  h1 .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #34d399; margin-right: 10px;
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    70% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+  }
+  .sub { margin: 8px 0 0; color: #94a3b8; font-size: 12px; }
+  .frame {
+    margin: 16px 24px 8px;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    background: #020617;
+    overflow: auto;
+  }
+  svg { display: block; min-width: 980px; }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 8px 24px 28px;
+  }
+  .card {
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 14px 16px;
+    background: #0f172a;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 12px; }
+  .card ul { margin: 0; padding: 0; list-style: none; color: #cbd5e1; font-size: 11px; line-height: 1.7; }
+  .cyan { color: #22d3ee; }
+  .green { color: #34d399; }
+  .amber { color: #fbbf24; }
+  footer { padding: 0 32px 24px; color: #64748b; font-size: 10px; }
+  @media (max-width: 860px) {
+    .cards { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot"></span>QPhone 结构</h1>
+  <p class="sub">v0.5 · 2026-10-22 · 云机（redroid／天翼云手机）· Mobilerun · 客户端＝薄壳（Rakazo 已删）</p>
+</header>
+<div class="frame">
+<svg viewBox="0 0 1040 760" width="1040" height="760" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.2 L 8 5 L 0 8.8 z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arr-rose" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.2 L 8 5 L 0 8.8 z" fill="#fb7185"/>
+    </marker>
+  </defs>
+  <rect width="1040" height="760" fill="url(#grid)"/>
+
+  <!-- arrows first -->
+  <path d="M520 108 V148" stroke="#94a3b8" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+  <path d="M300 228 V268" stroke="#94a3b8" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+  <path d="M740 228 V268" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4 4" fill="none" marker-end="url(#arr)"/>
+  <path d="M520 328 V372" stroke="#94a3b8" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+  <path d="M390 452 H470" stroke="#34d399" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+  <path d="M700 432 V500" stroke="#94a3b8" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+  <path d="M520 580 V624" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="5 4" fill="none" marker-end="url(#arr-rose)"/>
+  <path d="M860 432 H930 V690 H760" stroke="#94a3b8" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+  <!-- region: single host -->
+  <rect x="48" y="352" width="760" height="360" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="8 4"/>
+  <text x="64" y="374" fill="#fbbf24" font-size="11">现有 x86 上的 Linux · 单节点 · 不新买机器</text>
+
+  <!-- user -->
+  <rect x="390" y="48" width="260" height="60" rx="6" fill="#0f172a"/>
+  <rect x="390" y="48" width="260" height="60" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="520" y="74" fill="#e2e8f0" font-size="12" text-anchor="middle">用户</text>
+  <text x="520" y="92" fill="#94a3b8" font-size="9" text-anchor="middle">讲一句，做完或卡住才回来</text>
+
+  <!-- clients -->
+  <rect x="150" y="148" width="300" height="80" rx="6" fill="#0f172a"/>
+  <rect x="150" y="148" width="300" height="80" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="300" y="178" fill="#e2e8f0" font-size="12" text-anchor="middle">对话客户端</text>
+  <text x="300" y="196" fill="#22d3ee" font-size="9" text-anchor="middle">薄壳 · 只发交代收结果</text>
+  <text x="300" y="212" fill="#94a3b8" font-size="9" text-anchor="middle">形态未定 · POST /turn + 事件流</text>
+
+  <rect x="590" y="148" width="300" height="80" rx="6" fill="#0f172a"/>
+  <rect x="590" y="148" width="300" height="80" rx="6" fill="rgba(8,51,68,0.25)" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="740" y="178" fill="#e2e8f0" font-size="12" text-anchor="middle">移动客户端</text>
+  <text x="740" y="196" fill="#94a3b8" font-size="9" text-anchor="middle">后置 · 同一条通道</text>
+  <text x="740" y="212" fill="#94a3b8" font-size="9" text-anchor="middle">不进第一版承诺</text>
+
+  <!-- bus -->
+  <rect x="250" y="268" width="540" height="60" rx="6" fill="#0f172a"/>
+  <rect x="250" y="268" width="540" height="60" rx="6" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="520" y="292" fill="#e2e8f0" font-size="12" text-anchor="middle">一条通道</text>
+  <text x="520" y="310" fill="#fdba74" font-size="9" text-anchor="middle">交代 · 进度 · 要人 · 结果 · 状态</text>
+
+  <!-- host + loop -->
+  <rect x="80" y="392" width="310" height="80" rx="6" fill="#0f172a"/>
+  <rect x="80" y="392" width="310" height="80" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="235" y="422" fill="#e2e8f0" font-size="12" text-anchor="middle">主机</text>
+  <text x="235" y="440" fill="#6ee7b7" font-size="9" text-anchor="middle">开关机 · 会话 · 不用手填端口</text>
+  <text x="235" y="456" fill="#94a3b8" font-size="9" text-anchor="middle">画面按需开，不常驻推流</text>
+
+  <rect x="470" y="392" width="310" height="80" rx="6" fill="#0f172a"/>
+  <rect x="470" y="392" width="310" height="80" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="625" y="422" fill="#e2e8f0" font-size="12" text-anchor="middle">操作循环</text>
+  <text x="625" y="440" fill="#6ee7b7" font-size="9" text-anchor="middle">借现成开源 · 不从零写点击</text>
+  <text x="625" y="456" fill="#94a3b8" font-size="9" text-anchor="middle">Mobilerun · 接这部 redroid</text>
+
+  <!-- phone -->
+  <rect x="220" y="500" width="400" height="80" rx="6" fill="#0f172a"/>
+  <rect x="220" y="500" width="400" height="80" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="420" y="530" fill="#e2e8f0" font-size="12" text-anchor="middle">一部云 Android</text>
+  <text x="420" y="548" fill="#fcd34d" font-size="9" text-anchor="middle">redroid · 远程 Windows 里的 Ubuntu</text>
+  <text x="420" y="564" fill="#94a3b8" font-size="9" text-anchor="middle">一部 · A9 只作对照</text>
+
+  <!-- system -->
+  <rect x="220" y="624" width="400" height="70" rx="6" fill="#0f172a"/>
+  <rect x="220" y="624" width="400" height="70" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="420" y="652" fill="#e2e8f0" font-size="12" text-anchor="middle">系统内能力 · 终点</text>
+  <text x="420" y="670" fill="#fda4af" font-size="9" text-anchor="middle">后置 · 第一部不编进镜像</text>
+
+  <!-- model -->
+  <rect x="840" y="620" width="170" height="74" rx="6" fill="#0f172a"/>
+  <rect x="840" y="620" width="170" height="74" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="925" y="650" fill="#e2e8f0" font-size="12" text-anchor="middle">模型地址</text>
+  <text x="925" y="668" fill="#94a3b8" font-size="9" text-anchor="middle">用户自备</text>
+  <text x="925" y="682" fill="#94a3b8" font-size="8" text-anchor="middle">不绑桌面桥</text>
+
+  <!-- legend -->
+  <text x="48" y="742" fill="#64748b" font-size="9">实线 = 第一版要通　　虚线 = 后置或终点　　红虚线 = 系统权限，还不是这周的施工图</text>
+</svg>
+</div>
+<section class="cards">
+  <div class="card">
+    <h3 class="cyan">用户看见的</h3>
+    <ul>
+      <li>对话，不是远程桌面</li>
+      <li>卡住才把屏幕递过来</li>
+      <li>一句话关机，状态说得清</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 class="green">第一版要跑通的</h3>
+    <ul>
+      <li>一部云手机，不用手填端口</li>
+      <li>借现成项目完成装包和点一步</li>
+      <li>另一台干净机器按文档能复现</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 class="amber">不在这张图里承诺的</h3>
+    <ul>
+      <li>集群、移动端、Windows</li>
+      <li>容器二选一已经定死</li>
+      <li>系统服务这周就编进镜像</li>
+    </ul>
+  </div>
+</section>
+<footer>QPhone · 设计稿 v0.3 · 第一部云机已定 redroid</footer>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>QPhone · UI 设计 v0.1 · 过程图 + 云机实况</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --bg:#fbfcfd; --card:#ffffff; --fg:#0d1117; --soft:#54606c; --line:rgba(13,17,23,.12);
+    --acc:#0284c7; --ok:#059669; --warn:#b45309; --no:#be123c;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0a0d12; --card:#11161d; --fg:#eef2f7; --soft:#9aa7b4; --line:rgba(255,255,255,.13);
+           --acc:#38bdf8; --ok:#34d399; --warn:#fbbf24; --no:#fb7185; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:26px 22px 40px;background:var(--bg);color:var(--fg);
+       font:16px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+       -webkit-font-smoothing:antialiased;max-width:1080px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:.2px}
+  .sub{color:var(--soft);font-size:13.5px;margin-bottom:22px}
+  h2{font-size:17px;margin:30px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  h3{font-size:14.5px;margin:18px 0 8px}
+  p{margin:8px 0}
+  table{width:100%;border-collapse:collapse;margin:10px 0 4px;font-size:14.5px}
+  th,td{text-align:left;padding:8px 10px;border:1px solid var(--line);vertical-align:top}
+  th{background:color-mix(in srgb, var(--acc) 8%, transparent);font-weight:600;font-size:13.5px}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:13px;
+       background:color-mix(in srgb, var(--fg) 6%, transparent);padding:1px 5px;border-radius:4px}
+  .note{border-left:3px solid var(--acc);padding:8px 12px;margin:12px 0;font-size:14px;
+        background:color-mix(in srgb, var(--acc) 7%, transparent)}
+  .tag{display:inline-block;font:11px/1.6 ui-monospace,Menlo,monospace;letter-spacing:.5px;
+       border:1px solid var(--line);border-radius:3px;padding:0 6px;color:var(--soft);margin-left:6px}
+  .rec{border-color:var(--ok);color:var(--ok)}
+
+  /* ── 示意图 ── */
+  .wire{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:14px;margin:12px 0 6px}
+  .wire .cap{font:10.5px/1 ui-monospace,Menlo,monospace;letter-spacing:1px;color:var(--soft);
+             text-transform:uppercase;margin-bottom:10px}
+  .row{display:flex;gap:8px;align-items:flex-start}
+  .flowbox{flex:1;min-width:0;border:1px dashed var(--line);border-radius:6px;padding:10px;display:flex;
+           gap:6px;flex-wrap:wrap;align-items:center}
+  .node{border:1px solid var(--line);border-radius:4px;padding:6px 9px;font-size:11.5px;background:var(--bg)}
+  .node.on{border-color:var(--acc);color:var(--acc)}
+  .livebox{width:64px;flex:0 0 64px;border:1px solid var(--acc);border-radius:4px;
+           aspect-ratio:720/1600;background:linear-gradient(180deg,#0b1118,#05070a);
+           display:grid;place-items:center;font:9px/1.3 ui-monospace,Menlo,monospace;color:#7c8b99;text-align:center}
+  .livebar{width:100%;border:1px solid var(--acc);border-radius:4px;height:46px;margin-top:10px;
+           background:linear-gradient(90deg,#0b1118,#05070a);display:flex;align-items:center;
+           justify-content:center;font:9.5px/1 ui-monospace,Menlo,monospace;color:#7c8b99}
+  .float{position:relative;height:96px;border:1px dashed var(--line);border-radius:6px;padding:10px}
+  .float .fl{position:absolute;right:10px;bottom:10px;width:40px;aspect-ratio:720/1600;
+             border:1px solid var(--acc);border-radius:6px;background:#05070a;display:grid;place-items:center;
+             font:8px/1 ui-monospace,Menlo,monospace;color:#7c8b99}
+  ul{margin:6px 0 6px 18px;padding:0}
+  li{margin:3px 0;font-size:14.5px}
+  .kv{font-size:14px}
+  .kv b{display:inline-block;min-width:104px;color:var(--soft);font-weight:500}
+</style>
+</head>
+<body>
+
+<h1>QPhone · UI 设计 v0.1</h1>
+<div class="sub">主题：过程图（顶层动态）＋ 云机实况窗　·　基准：现在你睇到嗰版科技风 ·　状态：设计稿，未落地</div>
+
+<div class="note">
+规矩讲明：<b>呢份系设计稿，代码唔会再动</b>。你圈边个方案，我先按圈住嗰个改。
+</div>
+
+<h2>1 · 要解决咩</h2>
+<table>
+  <tr><th style="width:150px">问题</th><th>现状</th><th style="width:230px">目标</th></tr>
+  <tr><td>过程图睇得到「边个组件做紧嘢」</td><td>已经有：7 节点高亮 + 回路</td><td>保留，唔改</td></tr>
+  <tr><td>睇唔到云机真实画面</td><td>要另开窗口／靠想象</td><td>同屏放一格真机画面</td></tr>
+  <tr><td>画面同步骤对唔上</td><td>—</td><td>动作一发生就抓帧，过程图标到边步，画面就是嗰步</td></tr>
+</table>
+
+<h2>2 · 三个方案（只选一个）</h2>
+
+<div class="wire">
+  <div class="cap">方案 A · 右侧竖窗　<span class="tag rec">推荐</span></div>
+  <div class="row">
+    <div class="flowbox">
+      <span class="node">你</span><span class="node">壳</span><span class="node">/turn</span>
+      <span class="node on">Mobilerun</span><span class="node">Portal</span><span class="node">云机 UI</span>
+    </div>
+    <div class="livebox">云机<br>实况</div>
+  </div>
+</div>
+
+<div class="wire">
+  <div class="cap">方案 B · 底部横条</div>
+  <div class="flowbox">
+    <span class="node">你</span><span class="node">壳</span><span class="node on">/turn</span>
+    <span class="node">Mobilerun</span><span class="node">Portal</span><span class="node">云机 UI</span>
+  </div>
+  <div class="livebar">云机实况（横放，只显示上半屏）</div>
+</div>
+
+<div class="wire">
+  <div class="cap">方案 C · 右下浮窗</div>
+  <div class="float">
+    <span class="node">云机 UI</span>
+    <span class="fl">实况</span>
+  </div>
+</div>
+
+<table>
+  <tr><th style="width:56px">方案</th><th>摆位 / 尺寸</th><th>好</th><th>唔好</th></tr>
+  <tr>
+    <td><b>A</b></td>
+    <td>流程图右侧，宽 150px（≥1180px 用 170px），9:20 竖窗</td>
+    <td>一眼对照「高亮节点 ↔ 真机画面」；唔遮任何东西；≤900px 自动落到流程下面</td>
+    <td>占用横向空间，流程要收窄（1280px 下流程仍有 1006px，实测够）</td>
+  </tr>
+  <tr>
+    <td><b>B</b></td>
+    <td>流程图下方，通栏高 46–60px</td>
+    <td>零横向占用；流程保持原宽</td>
+    <td>手机是竖的，横条只能切一条边，睇唔到全屏；同过程图上下分离，对照要来回扫</td>
+  </tr>
+  <tr>
+    <td><b>C</b></td>
+    <td>右下角浮窗，宽 64–80px，可拖</td>
+    <td>最省空间；似直播小窗</td>
+    <td>会遮住日志／输入框；要写拖动 + 吸边逻辑，成本最高</td>
+  </tr>
+</table>
+
+<h2>3 · 窗内规格（三个方案共用）</h2>
+<table>
+  <tr><th style="width:130px">项</th><th>规格</th></tr>
+  <tr><td>比例</td><td>720 : 1600（云机真实分辨率），竖窗 9:20，不裁切（<code>object-fit:cover</code> 同比例下等于不裁）</td></tr>
+  <tr><td>标题行</td><td><code>云机实况</code> + 状态点（在线绿 / 离线红）+ 等宽小字</td></tr>
+  <tr><td>底行</td><td>左：<code>720×1600</code>　右：最后一帧时间 <code>10:52:31</code></td></tr>
+  <tr><td>边框</td><td>1px，色 <code>acc</code> 30% 混 line；圆角 4px（配合科技风切角）</td></tr>
+  <tr><td>离线态</td><td>画面区盖 55% 黑 + 居中 <code>云机离线</code>，状态点转红</td></tr>
+  <tr><td>抓帧</td><td>可见时 2.6s／帧；分页被遮住降 8s／帧；单帧 6s 超时即跳过，不阻塞</td></tr>
+  <tr><td>联动</td><td><code>act</code> 事件（真正点落去）即刻抓一帧，不等定时器</td></tr>
+</table>
+
+<h2>4 · 同过程图嘅对照关系</h2>
+<table>
+  <tr><th style="width:150px">过程图状态</th><th>实况窗行为</th></tr>
+  <tr><td>等紧你讲嘢</td><td>照常刷新（8s 慢频），画面就是当前云机</td></tr>
+  <tr><td>Mobilerun 睇屏</td><td>刷新照旧，提示「正在看屏」</td></tr>
+  <tr><td>Portal 做紧</td><td>即刻抓帧 + 边框亮一下，让人见到动作落地</td></tr>
+  <tr><td>做完</td><td>抓最后一帧收尾，画面停住</td></tr>
+  <tr><td>云机离线</td><td>盖离线层，过程图状态转「要人睇一眼」</td></tr>
+</table>
+
+<h2>5 · 待你拍板（3 条）</h2>
+<table>
+  <tr><th style="width:56px">#</th><th>问题</th><th style="width:220px">我嘅倾向</th></tr>
+  <tr><td>1</td><td>方案 A / B / C，选边个？</td><td><b>A</b>（实测 1280 宽下流程仍有 1006px，够位）</td></tr>
+  <tr><td>2</td><td>点实况窗要唔要放大成整页（大图看细节）？</td><td>要，点一下开浮层大图，Esc 关</td></tr>
+  <tr><td>3</td><td>做唔做「每步留帧」，事后可回看某一步画面？</td><td>先唔做，等过程图稳定再加（会多存磁盘）</td></tr>
+</table>
+
+<h2>6 · 明确唔改嘅嘢</h2>
+<ul>
+  <li>过程图节点、连线、序号、科技层视觉：全部保留</li>
+  <li>模型框位置：留在下面，唔搬去顶部</li>
+  <li>顶栏 / 状态行 / 遥测行：唔动</li>
+  <li>输入框：回车发送规则唔动</li>
+</ul>
+
+<p class="kv" style="margin-top:22px;color:var(--soft);font-size:13px">
+  <b>文件</b>qphone-bot-dev/docs/UI设计-过程图+云机实况.html　<b>版本</b>v0.1　<b>日期</b>2026-10-23
+</p>
+
+</body>
+</html>

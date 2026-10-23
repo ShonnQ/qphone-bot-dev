@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>QPhone · UI 设计 v1.2（连线优化版）</title>
+<style>
+  :root{
+    color-scheme:dark;
+    --bg:#080a0e;--paper:#0b1016;--fg:#eef3f8;--soft:#96a3b2;--line:rgba(255,255,255,.12);
+    --acc:#7dd3fc;--acc2:#a78bfa;--amber:#FBBF24;--ok:#34D399;--no:#fb7185;
+  }
+  *{box-sizing:border-box}
+  body{margin:0 auto;max-width:1180px;padding:26px 20px 60px;background:var(--bg);color:var(--fg);
+    font:15px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+  h1{font-size:20px;margin:0 0 3px}
+  .sub{color:var(--soft);font-size:13px;margin-bottom:18px}
+  h2{font-size:15.5px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line);color:var(--acc)}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+  th,td{text-align:left;padding:7px 10px;border:1px solid var(--line);vertical-align:top}
+  th{background:rgba(125,211,252,.08);font-weight:600;white-space:nowrap}
+  td:first-child{white-space:nowrap;color:var(--acc);font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:rgba(255,255,255,.07);
+    padding:1px 5px;border-radius:3px}
+  .note{border-left:3px solid var(--acc);padding:8px 12px;margin:12px 0;font-size:13px;
+    background:rgba(125,211,252,.07);color:#cfd8e3}
+  ul{margin:6px 0 6px 18px;padding:0}
+  li{margin:3px 0;color:#cfd8e3;font-size:13.5px}
+
+  /* ══ 画框 ══ */
+  .art{border:1px solid var(--line);border-radius:12px;background:var(--paper);margin:12px 0 8px;overflow-x:auto}
+  .artcap{display:flex;justify-content:space-between;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);
+    font:10.5px/1.6 ui-monospace,Menlo,monospace;letter-spacing:1px;color:var(--soft);text-transform:uppercase}
+  .artcap b{color:var(--fg);font-weight:600;letter-spacing:.4px}
+
+  /* ══ mock（照真壳 75% 字号画）══ */
+  .mock{min-width:900px;padding:14px 16px 16px;background:
+      radial-gradient(760px 260px at 12% -20%,rgba(125,211,252,.13),transparent 62%),
+      radial-gradient(680px 240px at 92% -24%,rgba(167,139,250,.10),transparent 60%),
+      #080b10;font:11px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+  .m-head{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+  .m-mark{width:20px;height:20px;border-radius:4px;background:linear-gradient(140deg,var(--acc),var(--acc2));
+    display:grid;place-items:center}
+  .m-mark svg{width:11px;height:11px;stroke:#07121a;fill:none;stroke-width:2.2;stroke-linecap:round}
+  .m-head b{font-size:12px;letter-spacing:.3px}
+  .m-ver{font:8px/1 ui-monospace,Menlo,monospace;color:var(--soft);border:1px solid var(--line);border-radius:3px;padding:2px 5px}
+  .m-chips{margin-left:auto;display:flex;gap:6px}
+  .m-chip{display:flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:4px;padding:3px 8px;
+    font:8.5px/1.5 ui-monospace,Menlo,monospace;color:var(--soft)}
+  .m-chip b{color:var(--amber);font-weight:600}
+  .m-dot{width:5px;height:5px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)}
+
+  /* 两个独立区域 */
+  .m-layout{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:12px;align-items:stretch}
+  .m-board{position:relative;border:1px solid var(--line);border-radius:12px;padding:13px 15px 12px;
+    background:linear-gradient(180deg,#10151c,#0c1117);display:flex;flex-direction:column;overflow:hidden}
+  .m-board:before{content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(rgba(34,211,238,.06) 1px,transparent 1px) 0 0/100% 24px,
+               linear-gradient(90deg,rgba(34,211,238,.06) 1px,transparent 1px) 0 0/24px 100%;
+    -webkit-mask-image:radial-gradient(130% 90% at 50% 0%,#000 34%,transparent 88%);
+            mask-image:radial-gradient(130% 90% at 50% 0%,#000 34%,transparent 88%)}
+  .m-hud{position:absolute;width:7px;height:7px;border:1px solid rgba(125,211,252,.5)}
+  .m-hud.tl{top:7px;left:7px;border-right:0;border-bottom:0}
+  .m-hud.tr{top:7px;right:7px;border-left:0;border-bottom:0}
+  .m-hud.bl{bottom:7px;left:7px;border-right:0;border-top:0}
+  .m-hud.br{bottom:7px;right:7px;border-left:0;border-top:0}
+
+  /* 节点 */
+  .m-flow{display:flex;align-items:center;flex-wrap:nowrap;position:relative;z-index:1;padding-bottom:104px}
+  .m-n{position:relative;display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid var(--line);
+    border-radius:6px;background:linear-gradient(180deg,rgba(255,255,255,.05),transparent);white-space:nowrap}
+  .m-n b{font-size:10.5px;letter-spacing:.3px;display:block;line-height:1.25}
+  .m-n small{font-size:7.8px;color:var(--soft);display:block;line-height:1.3}
+  .m-n .ix{position:absolute;top:2px;right:4px;font:6.5px/1 ui-monospace,Menlo,monospace;color:var(--soft);opacity:.6}
+  .m-n svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;
+    stroke-linejoin:round;opacity:.62}
+  /* 锚点 */
+  .m-n:before,.m-n:after{content:"";position:absolute;top:50%;width:4px;height:4px;border-radius:50%;
+    background:#0b1017;border:1px solid rgba(255,255,255,.24);transform:translateY(-50%)}
+  .m-n:before{left:-2.5px}
+  .m-n:after{right:-2.5px}
+  /* 运行中：2px 实黄内边框闪烁 */
+  .m-n.hot{box-shadow:inset 0 0 0 2px var(--amber)}
+  .m-n.hot:before,.m-n.hot:after{border-color:var(--amber)}
+  .m-n.done{box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+
+  /* 连线：1px 实线 + 右端箭头 + pill */
+  .w{flex:1 1 52px;min-width:38px;height:1px;background:rgba(255,255,255,.22);position:relative;margin:0 3px}
+  .w:after{content:"";position:absolute;right:-1px;top:-2px;width:4px;height:5px;background:rgba(255,255,255,.30);
+    clip-path:polygon(0 0,100% 50%,0 100%)}
+  .w .tag{position:absolute;left:50%;top:0;transform:translate(-50%,-50%);font:7px/1 ui-monospace,Menlo,monospace;
+    letter-spacing:.7px;color:#cfd8e3;background:#0b1017;border:1px solid rgba(255,255,255,.13);
+    border-radius:8px;padding:2px 6px;white-space:nowrap}
+  .w.dash{background:none;border-top:1px dashed rgba(255,255,255,.24);height:0}
+  .w.dash:after{top:-3px}
+  .w.dash .tag{color:#bfe9ff;border-color:rgba(125,211,252,.30)}
+  .w.dash.bi:before{content:"";position:absolute;left:-1px;top:-3px;width:4px;height:5px;
+    background:rgba(255,255,255,.30);clip-path:polygon(100% 0,0 50%,100% 100%)}
+  .w.live{height:2px;background:var(--amber);box-shadow:0 0 8px -2px rgba(251,191,36,.8)}
+  .w.live:after{background:var(--amber);top:-1.5px}
+  .w.live .tag{color:#161104;background:var(--amber);border-color:var(--amber);font-weight:600}
+  .w.mute{opacity:.28}
+
+  /* 框（Mac / 云机） */
+  .m-grp{position:relative;border:1px dashed rgba(255,255,255,.15);border-radius:8px;padding:9px 8px;
+    display:inline-flex;align-items:center;background:linear-gradient(180deg,rgba(255,255,255,.04),transparent)}
+  .m-grp.mac{border-color:rgba(125,211,252,.40)}
+  .m-grp.phone{border-color:rgba(52,211,153,.38)}
+  .m-gtag{position:absolute;top:-7px;left:9px;padding:0 6px;border-radius:3px;background:#0d1218;
+    border:1px solid var(--line);font:7.5px/1.8 ui-monospace,Menlo,monospace;letter-spacing:1px;
+    text-transform:uppercase;color:var(--soft);white-space:nowrap}
+  .m-grp.mac>.m-gtag{color:var(--acc)}
+  .m-grp.phone>.m-gtag{color:var(--ok)}
+  .m-grp.llm{border-color:rgba(167,139,250,.46);background:linear-gradient(180deg,rgba(167,139,250,.07),transparent)}
+  .m-grp.llm>.m-gtag{color:var(--acc2)}
+
+  /* 模型：Mac 框外正下方，纵向虚线 */
+  .m-macwrap{position:relative;display:flex;align-items:center}
+  .m-macdrop{position:absolute;top:100%;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;margin-top:3px;z-index:3}
+  .m-mcomms{display:flex;flex-direction:column;align-items:center;gap:0;position:relative}
+  .m-mcomms .bar{width:1px;height:17px;border-left:1px dashed rgba(255,255,255,.34);position:relative}
+  .m-mcomms .bar.up:before,.m-mcomms .bar.down:after{content:"";position:absolute;left:-2.5px;width:6px;height:5px;
+    background:rgba(255,255,255,.40)}
+  .m-mcomms .bar.up:before{top:-1px;clip-path:polygon(50% 0,100% 100%,0 100%)}
+  .m-mcomms .bar.down:after{bottom:-1px;clip-path:polygon(50% 100%,100% 0,0 0)}
+  .m-mcomms .tag{font:7px/1 ui-monospace,Menlo,monospace;letter-spacing:.7px;color:#bfe9ff;background:#0b1017;
+    border:1px solid rgba(125,211,252,.30);border-radius:8px;padding:2px 6px;white-space:nowrap}
+
+  /* 状态区 */
+  .m-status-row{display:flex;align-items:baseline;gap:10px;margin-top:14px;flex-wrap:wrap;position:relative;z-index:1}
+  .m-now{font-size:14.2px;font-weight:700;letter-spacing:.3px}
+  .m-stepno{font:8.5px/1.6 ui-monospace,Menlo,monospace;color:var(--soft);letter-spacing:1.2px}
+  .m-pct{margin-left:auto;font:8.5px/1.6 ui-monospace,Menlo,monospace;color:var(--soft)}
+  .m-track{height:4px;border-radius:2px;margin-top:8px;background:rgba(255,255,255,.07);overflow:hidden}
+  .m-track i{display:block;height:100%;width:30%;border-radius:2px;
+    background:repeating-linear-gradient(90deg,transparent 0 6px,rgba(0,0,0,.55) 6px 8px),
+               linear-gradient(90deg,var(--acc),var(--acc2))}
+  .m-detail{margin-top:7px;font-size:10px;color:var(--soft)}
+  .m-tele{display:flex;justify-content:space-between;gap:10px;margin-top:10px;padding-top:6px;
+    border-top:1px solid rgba(255,255,255,.07);font:8px/1 ui-monospace,Menlo,monospace;
+    letter-spacing:1px;color:var(--soft);text-transform:uppercase}
+  .m-log{margin-top:10px;display:flex;flex-direction:column;gap:6px;flex:1;position:relative;z-index:1}
+  .m-turn{border:1px solid var(--line);border-radius:4px;padding:6px 9px;background:rgba(255,255,255,.03)}
+  .m-turn.me{border-color:rgba(125,211,252,.4);background:rgba(125,211,252,.07)}
+  .m-who{font:7px/1.4 ui-monospace,Menlo,monospace;letter-spacing:1px;text-transform:uppercase;color:var(--soft)}
+  .m-ev{font-size:10px}
+  .m-foot{display:flex;gap:7px;margin-top:10px;position:relative;z-index:1}
+  .m-input{flex:1;height:30px;border:1px solid var(--line);border-radius:4px;padding:7px 9px;font-size:9px;
+    color:var(--soft);background:rgba(255,255,255,.04)}
+  .m-send{min-width:52px;border-radius:4px;display:grid;place-items:center;font-size:9.5px;font-weight:700;
+    color:#fff5f5;background:linear-gradient(140deg,#ef4444,#b91c1c)}
+
+  /* 实况区（独立框） */
+  .m-livepanel{border:1px solid var(--line);border-radius:12px;padding:10px;background:linear-gradient(180deg,#10151c,#0c1117);
+    display:flex;flex-direction:column;gap:6px}
+  .m-live-head{display:flex;align-items:center;gap:5px;font:8.5px/1.5 ui-monospace,Menlo,monospace;
+    letter-spacing:.9px;color:var(--soft);text-transform:uppercase}
+  .m-screen{position:relative;aspect-ratio:720/1600;border:1px solid rgba(125,211,252,.32);border-radius:4px;
+    overflow:hidden;background:#05070a;width:100%}
+  .m-screen .ph{position:absolute;inset:0;display:flex;flex-direction:column;gap:5px;padding:6px 5px;
+    background:linear-gradient(180deg,#0a1a2a,#060a10 60%)}
+  .m-status{display:flex;justify-content:space-between;font:6px/1 ui-monospace,Menlo,monospace;color:#9fb3c4}
+  .m-icons{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:5px}
+  .m-ico{aspect-ratio:1;border-radius:3px;background:linear-gradient(140deg,#1c3a52,#132433)}
+  .m-icons .m-ico:nth-child(2){background:linear-gradient(140deg,#3a2a52,#221a33)}
+  .m-icons .m-ico:nth-child(3){background:linear-gradient(140deg,#123f34,#0d2620)}
+  .m-icons .m-ico:nth-child(4){background:linear-gradient(140deg,#4a3320,#2a1e14)}
+  .m-dock{margin-top:auto;display:flex;justify-content:center;gap:5px}
+  .m-dock i{width:11px;height:3px;border-radius:2px;background:rgba(159,179,196,.35)}
+  .m-live-foot{display:flex;justify-content:space-between;font:7px/1.4 ui-monospace,Menlo,monospace;color:var(--soft)}
+
+  .callouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:12px}
+  .co{border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:rgba(255,255,255,.02);font-size:12.5px;color:#cfd8e3}
+  .co b{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;letter-spacing:1px;color:var(--acc);display:block;margin-bottom:3px}
+  .small{font-size:12px;color:var(--soft)}
+</style>
+</head>
+<body>
+
+<h1>QPhone · UI 设计 v1.2（连线优化版）</h1>
+<div class="sub">结构不动，只换「线」这一层。本稿同时补齐 v1.0 之后已落地嘅改动：两区独立、默认暗黑、字体 75%、实况 378px、20 步、模型换 DeepSeek。</div>
+
+<div class="note">
+本稿系落地依据。上一版 v1.0（实况窗嵌在 board 内、双主题）已被本稿取代；连线单独稿 v1.1 亦并入本稿第 2 节，唔再单独维护。
+</div>
+
+<h2>1 · 主画面（跑动中 · 暗黑 · 1280 逻辑宽）</h2>
+<div class="art">
+  <div class="artcap"><b>主画面 / 跑动中 STEP 03/20</b><span>两区独立 · 连线新语法</span></div>
+  <div class="mock">
+    <div class="m-head">
+      <span class="m-mark"><svg viewBox="0 0 24 24"><path d="M4 12h6l2-5 2 10 2-5h4"/></svg></span>
+      <b>QPhone</b><span class="m-ver">v0.8</span>
+      <div class="m-chips">
+        <span class="m-chip">STEP <b>03/20</b></span>
+        <span class="m-chip">workbuddy/deepseek-v4.1-flash</span>
+        <span class="m-chip"><i class="m-dot"></i>127.0.0.1:10532</span>
+      </div>
+    </div>
+
+    <div class="m-layout">
+      <!-- 左：过程图 + 状态 + 日志 -->
+      <div class="m-board">
+        <i class="m-hud tl"></i><i class="m-hud tr"></i><i class="m-hud bl"></i><i class="m-hud br"></i>
+
+        <div class="m-flow">
+          <div class="m-n done"><i class="ix">01</i>
+            <svg viewBox="0 0 24 24"><path d="M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM4 21a8 8 0 0 1 16 0"/></svg>
+            <span><b>你</b><small>讲一句</small></span></div>
+
+          <div class="w live"><span class="tag">PROMPT</span></div>
+
+          <div class="m-macwrap">
+            <div class="m-grp mac">
+              <span class="m-gtag">MAC 本机</span>
+              <div class="m-n done"><i class="ix">02</i>
+                <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg>
+                <span><b>壳</b><small>收交代</small></span></div>
+              <div class="w live"></div>
+              <div class="m-n done"><i class="ix">03</i>
+                <svg viewBox="0 0 24 24"><path d="M4 7h10l-3-3M20 17H10l3 3"/></svg>
+                <span><b>/turn</b><small>转事件</small></span></div>
+              <div class="w live"></div>
+              <div class="m-n done mdl-host"><i class="ix">04</i>
+                <svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
+                <span><b>Mobilerun</b><small>睇屏规划</small></span>
+                <div class="m-macdrop">
+                  <div class="m-mcomms">
+                    <span class="bar up"></span>
+                    <span class="tag">HTTPS ⇄ api.x.ai</span>
+                    <span class="bar down"></span>
+                  </div>
+                  <div class="m-grp llm">
+                    <span class="m-gtag">远端 LLM</span>
+                    <div class="m-n"><i class="ix">07</i>
+                      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>
+                      <span><b>DeepSeek V4.1</b><small>多模态 · 每步问一次</small></span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="w dash bi mute"><span class="tag">ADB ⇄ tcp 10532</span></div>
+
+          <div class="m-grp phone">
+            <span class="m-gtag">云机 · ANDROID 13</span>
+            <div class="m-n"><i class="ix">05</i>
+              <svg viewBox="0 0 24 24"><path d="M12 3v7m0 0 3-3m-3 3L9 7"/><circle cx="12" cy="16" r="4"/></svg>
+              <span><b>Portal</b><small>落到动作</small></span></div>
+            <div class="w mute"></div>
+            <div class="m-n"><i class="ix">06</i>
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>
+              <span><b>云机 UI</b><small>被点组件</small></span></div>
+          </div>
+        </div>
+
+        <div class="m-status-row">
+          <span class="m-now">模型谂紧</span>
+          <span class="m-stepno">STEP 03 / 20</span>
+          <span class="m-pct">15%</span>
+        </div>
+        <div class="m-track"><i></i></div>
+        <div class="m-detail">睇到桌面图标，准备点「设置」</div>
+        <div class="m-tele"><span>qph-0.8</span><span>mac :8777</span><span>adb :10532</span><span>deepseek-v4.1</span></div>
+
+        <div class="m-log">
+          <div class="m-turn me"><div class="m-who">你</div><div class="m-ev">打开应用宝下载汽水音乐</div></div>
+          <div class="m-turn"><div class="m-who">云机</div><div class="m-ev">应用宝首页已开，点搜索框 · 第 3 步</div></div>
+        </div>
+
+        <div class="m-foot">
+          <div class="m-input">讲一句交代，回车送出 · Shift+回车换行</div>
+          <div class="m-send">发送</div>
+        </div>
+      </div>
+
+      <!-- 右：云机实况（独立区域） -->
+      <aside class="m-livepanel">
+        <div class="m-live-head"><i class="m-dot"></i>云机实况</div>
+        <div class="m-screen">
+          <div class="ph">
+            <div class="m-status"><span>14:52</span><span>5G ▮▮</span></div>
+            <div class="m-icons">
+              <i class="m-ico"></i><i class="m-ico"></i><i class="m-ico"></i><i class="m-ico"></i>
+              <i class="m-ico"></i><i class="m-ico"></i><i class="m-ico"></i><i class="m-ico"></i>
+              <i class="m-ico"></i><i class="m-ico"></i><i class="m-ico"></i><i class="m-ico"></i>
+            </div>
+            <div class="m-dock"><i></i><i></i><i></i><i></i></div>
+          </div>
+        </div>
+        <div class="m-live-foot"><span>720×1600</span><span>14:52:31</span></div>
+      </aside>
+    </div>
+  </div>
+</div>
+<p class="small">mock 已按新连线语法画：pill 标签、箭头、锚点、ADB 跨机段独立、模型纵向虚线；活跃段与运行中节点同为琥珀色，未走到的线降到 28%。</p>
+
+<h2>2 · 连线规格（v1.2 新增 · 定稿）</h2>
+<table>
+  <tr><th style="width:150px">规则</th><th>做法</th><th style="width:230px">为何</th></tr>
+  <tr><td>实线 / 虚线</td><td>1px；框内同机一律实线，跨进程或跨机一律虚线</td><td>两种线两个含义，唔再有第三种</td></tr>
+  <tr><td>颜色</td><td>静线 <code>rgba(255,255,255,.22)</code>；虚线标签 <code>#bfe9ff</code>；活跃 <code>#FBBF24</code></td><td>与运行中节点同色，一套语言</td></tr>
+  <tr><td>箭头</td><td>4×5px 三角，右端；双向段（ADB、HTTPS）左右各一</td><td>唔读字都知流向</td></tr>
+  <tr><td>锚点</td><td>节点左右各 4px 环，底 <code>#0b1017</code>、边 1px；线接环，线与框留 5px</td><td>睇得清「入／出」，线唔穿框</td></tr>
+  <tr><td>标签</td><td>7px 等宽、字距 .7、圆角 8、<code>padding 2px 6px</code>，骑在线中</td><td>字同线唔再抢位</td></tr>
+  <tr><td>跨机段</td><td>由 Mac 框右边界 → 云机框左边界，独立一段虚线 + 双向箭头 + `ADB ⇄ tcp 10532`</td><td>物理事实：Mobilerun 在 Mac，Portal 在云机</td></tr>
+  <tr><td>纵向段</td><td>模型挂 Mac 框外正下方：10px 竖虚线 + `HTTPS ⇄ api.x.ai`</td><td>全图唯一竖线，其余全横</td></tr>
+  <tr><td>活跃态</td><td>已走段 2px 琥珀 + 8px 外光；未走段 opacity .28；节点同步 2px 琥珀内边框闪缩 1.1s</td><td>一眼睇到进度位置</td></tr>
+  <tr><td>窄窗</td><td>&lt;1100px：线缩到 38px 后整段换行，云机组居中，标签保留</td><td>唔留悬空线</td></tr>
+</table>
+
+<h2>3 · 尺寸 / 字体规格（对齐现实现）</h2>
+<table>
+  <tr><th style="width:170px">元素</th><th>规格</th></tr>
+  <tr><td>版面</td><td><code>.layout</code> 两栏：过程图 <code>minmax(0,1fr)</code> + 实况 <code>252px</code>（CSS）· gap 14 · 两栏等高 stretch</td></tr>
+  <tr><td>整体缩放</td><td><code>body{zoom:1.5}</code>（组件 + 实况一起放大）</td></tr>
+  <tr><td>实况窗</td><td>宽 252 CSS（=378 物理）· <code>aspect-ratio:720/1600</code> · 边框 1px <code>rgba(125,211,252,.32)</code> · 圆角 4px</td></tr>
+  <tr><td>字体比例</td><td>基准 ×0.75：节点标题 <code>10.12px</code>、状态大字 <code>14.25px</code>、详情 <code>10.12px</code>、节点小字 <code>7.88px</code>、遥测 <code>7.12px</code>、实况底行 <code>6.38px</code></td></tr>
+  <tr><td>主题</td><td>默认暗黑：<code>:root</code> 写死暗色 + <code>color-scheme:dark</code>，删 <code>prefers-color-scheme</code></td></tr>
+  <tr><td>运行中节点</td><td>2px 实黄 <code>#FBBF24</code> 内边框，α <code>.45↔1</code>，<code>amberblink 1.1s ease-in-out</code>；无填充/无光晕/无标签</td></tr>
+  <tr><td>日志</td><td>搬入过程图框底部，<code>flex:1 1 0</code>，占满实况窗撑高后嘅空间，可滚动</td></tr>
+  <tr><td>步数</td><td>上限 20（<code>QPHONE_STEPS=20</code>）</td></tr>
+  <tr><td>模型</td><td><code>workbuddy/deepseek-v4.1-flash</code> 经 Qbridge <code>127.0.0.1:7863/v1</code></td></tr>
+</table>
+
+<h2>4 · 已落地 / 待落地</h2>
+<table>
+  <tr><th style="width:190px">项</th><th style="width:110px">状态</th><th>说明</th></tr>
+  <tr><td>两区独立</td><td>已落地</td><td><code>.board</code> + <code>.livepanel</code> 各自成框、等高</td></tr>
+  <tr><td>实况 252 / 378</td><td>已落地</td><td>再大 0.5 倍后定案</td></tr>
+  <tr><td>字体 ×0.75</td><td>已落地</td><td>由 ×0.5 → 100% → 75% 三轮定案</td></tr>
+  <tr><td>暗黑默认</td><td>已落地</td><td>删双主题</td></tr>
+  <tr><td>运行中黄框闪缩</td><td>已落地</td><td><code>amberblink</code></td></tr>
+  <tr><td>模型挂 Mac 框下</td><td>已落地</td><td>纵向虚线 + HTTPS pill</td></tr>
+  <tr><td>20 步 / DeepSeek V4.1</td><td>已落地</td><td><code>/health</code> 可验</td></tr>
+  <tr><td><b>连线新语法</b></td><td><b>待落地</b></td><td>pill 标签、箭头、锚点、ADB 独立段、活跃琥珀 —— 即本稿第 2 节，等你点头就改</td></tr>
+</table>
+
+<h2>5 · 落地顺序（连线这部分）</h2>
+<table>
+  <tr><th style="width:50px">步</th><th>做咩</th><th style="width:220px">验收</th></tr>
+  <tr><td>1</td><td>节点加左右锚点，线改接锚点</td><td>线唔再贴住框边；60% 缩放下仍见锚点</td></tr>
+  <tr><td>2</td><td>标签统一成 pill（PROMPT / ADB ⇄ tcp 10532 / HTTPS ⇄ api.x.ai）</td><td>三段标签同高同字距，唔遮线</td></tr>
+  <tr><td>3</td><td>每段线加右端箭头；ADB 段改双向</td><td>唔读字都知流向</td></tr>
+  <tr><td>4</td><td>ADB 段搬出 Mac 框，做成 Mac↔云机之间独立一段</td><td>位置对应真实跨机关系</td></tr>
+  <tr><td>5</td><td>活跃线改 2px 琥珀；未走到线 opacity .28</td><td>跑动时一眼睇到进度位置</td></tr>
+  <tr><td>6</td><td>四档量测 1600 / 1440 / 1280 / 430</td><td>无横向溢出、无悬空线、换行后居中</td></tr>
+</table>
+
+<div class="callouts">
+  <div class="co"><b>COLOR</b>底 #080B10 · 面板 #10151C · 主 #7DD3FC · 副 #A78BFA · 活跃 #FBBF24 · 成功 #34D399</div>
+  <div class="co"><b>TYPE</b>正文 10.12px · 状态 14.25px/700 · 小标签等宽 7–8px + 字距 .7–1</div>
+  <div class="co"><b>本稿版本</b>v1.2 · 2026-10-23 · 取代 v1.0 与连线稿 v1.1</div>
+</div>
+
+<p class="small" style="margin-top:16px">文件：qphone-bot-dev/docs/UI设计-A方案-完整稿.html（内容已升至 v1.2）　·　实现基准：shell.html 现运行版 + serve.py</p>
+
+</body>
+</html>
