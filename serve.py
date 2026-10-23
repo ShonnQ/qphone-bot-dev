@@ -44,6 +44,7 @@ HERE = Path(__file__).resolve().parent
 BIND = os.environ.get("QPHONE_BIND", "127.0.0.1")
 PORT = int(os.environ.get("QPHONE_PORT", "8777"))
 TARGET = os.environ.get("QPHONE_TARGET", "127.0.0.1:5555")
+HOME_AFTER = os.environ.get("QPHONE_HOME_AFTER", "1").lower() not in ("0", "false", "no", "off")
 ADB = os.environ.get("QPHONE_ADB", os.path.expanduser("~/Library/Android/sdk/platform-tools/adb"))
 MODEL = os.environ.get("QPHONE_MODEL", "grok-4.7")
 PROVIDER = os.environ.get("QPHONE_PROVIDER", "DeepSeek")  # 用 DeepSeek 档配自定 base_url；
@@ -372,6 +373,8 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
             _pub(q, "human", action="")
             q.put(("needs_human", {"reason": message or "agent 未做到，需要人睇屏"}))
             q.put(("result", {"success": False, "message": message or "未做到"}))
+        if HOME_AFTER:
+            press_home()                     # 收尾：任务完就返桌面，唔留低上个 app
     except Exception as e:  # noqa: BLE001
         q.put(("needs_human", {"reason": f"控制程序出错：{e}"}))
         q.put(("result", {"success": False, "message": str(e)}))
@@ -696,6 +699,23 @@ FRAME_LOCK = threading.Lock()
 FRAME_EVT = threading.Event()   # 有请求就即刻唤醒抓帧
 
 
+def press_home(delay: float = 0.8) -> bool:
+    """收尾复位：按一次 HOME，顺手刷新一帧。"""
+    try:
+        time.sleep(delay)
+        subprocess.run([ADB, "-s", TARGET, "shell", "input", "keyevent", "3"],
+                       capture_output=True, timeout=10)
+        print(f"[{time.strftime('%H:%M:%S')}] HOME 收尾（完单复位）", flush=True)
+        time.sleep(0.5)
+        try:
+            grab_frame()
+        except Exception:  # noqa: BLE001
+            pass
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def grab_frame(timeout: float = 12.0) -> bytes:
     """抓一帧 PNG（唯一一处 adb screencap）。"""
     png = subprocess.run([ADB, "-s", TARGET, "exec-out", "screencap", "-p"],
@@ -868,6 +888,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"ok": False, "error": "唔识呢条路径"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/device/home":
+            ok = press_home(0.0)
+            return self._send_json({"ok": ok})
         if self.path == "/history/clear":
             with HIST_LOCK:
                 n = len(HISTORY); HISTORY.clear()

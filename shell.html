@@ -33,6 +33,8 @@
         background:linear-gradient(140deg,var(--acc1),var(--acc2));
         box-shadow:0 6px 18px -8px var(--acc2);}
   .mark svg{width:14px;height:14px;stroke:#07121a;fill:none;stroke-width:2.2;stroke-linecap:round}
+  .brand .sub{font:7.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.3px;color:var(--soft);
+    font-weight:400;white-space:nowrap}
   .brand b{font-size:11.25px;letter-spacing:.2.25px}
   .brand .ver{font:8.25px/1 ui-monospace,Menlo,monospace;color:var(--soft);
               border:1px solid var(--line);border-radius:5px;padding:2px 5px}
@@ -502,8 +504,8 @@
 <header>
   <div class="brand">
     <span class="mark"><svg viewBox="0 0 24 24"><path d="M4 12h6l2-5 2 10 2-5h4"/></svg></span>
-    <b>QPhone</b>
-    <span class="ver">v0.8</span>
+    <b>QPhone Bot</b>
+    <span class="sub">（Mobilerun + LLM + Cloudphone）</span>
   </div>
   <div class="chips">
     <span class="chip" id="stepChip">STEP <b id="stepChipN">00/00</b></span>
@@ -597,6 +599,7 @@
       <span class="ch-av"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>
       <div class="ch-id"><b>云机 · QPhone</b><small id="chatSub">ANDROID 13 · 10532</small></div>
       <i class="ch-dot" id="chDot"></i>
+      <button class="ch-clear" id="chHome" title="叫云机返桌面">返桌面</button>
       <button class="ch-clear" id="chClear" title="清空会话">清空</button>
       <span class="ch-more">⋯</span>
     </div>
@@ -872,6 +875,13 @@ send.addEventListener("click", () => submit());
 input.addEventListener("input", () => {
   input.style.height = "auto";
   input.style.height = Math.min(96, input.scrollHeight) + "px";
+});
+$("chHome").addEventListener("click", async () => {
+  try{
+    const r = await (await fetch("/device/home", {method:"POST"})).json();
+    chip(r.ok ? "已叫云机返桌面" : "返桌面失败（adb 冇回应）");
+    if(r.ok){ slowLive = true; refreshLive(true); }
+  }catch(e){ chip("返桌面失败：" + e); }
 });
 $("chClear").addEventListener("click", async () => {
   try{
