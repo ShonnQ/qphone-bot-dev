@@ -706,6 +706,46 @@ FRAME_LOCK = threading.Lock()
 FRAME_EVT = threading.Event()   # 有请求就即刻唤醒抓帧
 
 
+KEYMAP = {"back": "4", "home": "3", "appswitch": "5", "menu": "82",
+          "enter": "66", "del": "67", "power": "26", "wakeup": "224", "sleep": "223"}
+
+
+def device_input(path: str, p: dict) -> dict:
+    """壳嘅「手」：tap / swipe / key。做完即刻抓一帧，令壳即刻见到反应。"""
+    t0 = time.time()
+    if path == "/device/tap":
+        x, y = int(p.get("x", -1)), int(p.get("y", -1))
+        if not (0 <= x < 8192 and 0 <= y < 8192):
+            raise ValueError("坐标唔对（要设备像素）")
+        cmd = [ADB, "-s", TARGET, "shell", "input", "tap", str(x), str(y)]
+    elif path == "/device/swipe":
+        x1, y1 = int(p.get("x1", -1)), int(p.get("y1", -1))
+        x2, y2 = int(p.get("x2", -1)), int(p.get("y2", -1))
+        ms = max(30, min(4000, int(p.get("ms", 220))))
+        if min(x1, y1, x2, y2) < 0:
+            raise ValueError("滑动要四个坐标 x1 y1 x2 y2")
+        cmd = [ADB, "-s", TARGET, "shell", "input", "swipe",
+               str(x1), str(y1), str(x2), str(y2), str(ms)]
+    elif path == "/device/key":
+        k = str(p.get("key", "")).strip().lower()
+        code = KEYMAP.get(k) or (k if k.isdigit() else "")
+        if not code:
+            raise ValueError("唔识呢个键 %r；可用：%s" % (k, " / ".join(KEYMAP)))
+        cmd = [ADB, "-s", TARGET, "shell", "input", "keyevent", str(code)]
+    else:
+        raise ValueError("唔识嘅输入：%s" % path)
+
+    cp = subprocess.run(cmd, capture_output=True, timeout=20)
+    if cp.returncode != 0:
+        msg = (cp.stderr or cp.stdout).decode("utf-8", "ignore").strip()[:160]
+        raise RuntimeError(msg or "adb 执行失败")
+    try:
+        grab_frame()
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True, "input": path.rsplit("/", 1)[-1], "ms": int((time.time() - t0) * 1000)}
+
+
 def press_home(delay: float = 0.8) -> bool:
     """收尾复位：按一次 HOME，顺手刷新一帧。"""
     try:
@@ -898,6 +938,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/device/home":
             ok = press_home(0.0)
             return self._send_json({"ok": ok})
+        if self.path in ("/device/tap", "/device/swipe", "/device/key"):
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                p = json.loads(self.rfile.read(length) or b"{}")
+            except json.JSONDecodeError:
+                return self._send_json({"ok": False, "error": "body 要系 JSON"}, 400)
+            try:
+                return self._send_json(device_input(self.path, p))
+            except ValueError as e:
+                return self._send_json({"ok": False, "error": str(e)}, 400)
+            except Exception as e:  # noqa: BLE001
+                return self._send_json({"ok": False, "error": str(e)}, 500)
         if self.path == "/history/clear":
             with HIST_LOCK:
                 n = len(HISTORY); HISTORY.clear()

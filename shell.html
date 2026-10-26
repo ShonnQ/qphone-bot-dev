@@ -312,6 +312,17 @@
   .livepanel .off b{font-size:8.5px;color:var(--warn);letter-spacing:.6px}
   .livepanel .off small{font-size:6.8px;color:#8fa3b6;line-height:1.5}
   .livepanel .off.show{display:grid}
+  .keypad{display:flex;gap:5px}
+  .kbtn{flex:1 1 0;padding:4px 0;border-radius:6px;cursor:pointer;
+        font:7.6px/1.2 ui-monospace,Menlo,monospace;letter-spacing:.4px;
+        color:var(--soft);background:var(--inset);border:1px solid var(--line)}
+  .kbtn:hover{color:var(--fg);border-color:var(--arrow2)}
+  .kbtn:active{transform:translateY(.5px)}
+  .livepanel .phone{touch-action:none;user-select:none;-webkit-user-select:none}
+  .ripple{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;
+          border:1.5px solid var(--warn);opacity:.95;pointer-events:none;
+          animation:rip .32s ease-out forwards}
+  @keyframes rip{to{transform:scale(1.9);opacity:0}}
   .live-foot{display:flex;justify-content:space-between;font:6.38px/1.4 ui-monospace,Menlo,monospace;color:var(--soft)}
   @media (min-width:1180px){ .layout{grid-template-columns:minmax(0,1fr) 252px} }
   @media (max-width:900px){ .layout{grid-template-columns:1fr} .livepanel{width:100%;max-width:220px} }
@@ -636,9 +647,14 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
 
 <aside class="livepanel">
   <div class="lp-head"><i class="ldot" id="ldot"></i><b>云机实况</b><span id="liveRes">—</span></div>
-  <div class="phone">
+  <div class="phone" id="liveBox" title="点一下＝点云机，拖动＝滑动">
     <img id="liveImg" alt="云机画面">
     <div class="off" id="liveOff"><b>云机离线</b><small id="liveOffSub">画面系旧帧</small></div>
+  </div>
+  <div class="keypad" id="keypad">
+    <button class="kbtn" data-key="back" type="button">返回</button>
+    <button class="kbtn" data-key="home" type="button">主页</button>
+    <button class="kbtn" data-key="appswitch" type="button">多任务</button>
   </div>
   <div class="live-foot"><span id="liveAge">—</span><span id="liveSize">—</span></div>
 </aside>
@@ -1078,6 +1094,75 @@ async function refreshLive(force){
   }catch(e){ liveOff.classList.add("show"); ldot.classList.remove("on"); }
   finally{ clearTimeout(kill); liveBusy = false; }
 }
+
+// ── 实况窗嘅「手」：点／拖动 → 设备坐标（含涟漪反馈）──
+async function postJSON(url, body){
+  const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"},
+                              cache:"no-store", body:JSON.stringify(body)});
+  const j = await r.json().catch(() => ({ok:false, error:"HTTP " + r.status}));
+  if(!j.ok) throw new Error(j.error || "失败");
+  return j;
+}
+function devSize(){
+  const m = ($("liveRes").textContent || "").match(/(\d+)\s*[×x]\s*(\d+)/);
+  return m ? {w:+m[1], h:+m[2]} : {w:720, h:1280};
+}
+function toDev(ev){                       // contain 之下要减走黑边，先算真实绘制区
+  const img = $("liveImg"), r = img.getBoundingClientRect();
+  if(!img.naturalWidth) return null;
+  const {w:dw, h:dh} = devSize();
+  const k = Math.min(r.width/dw, r.height/dh);
+  const dwp = dw*k, dhp = dh*k;
+  const ox = r.left + (r.width - dwp)/2, oy = r.top + (r.height - dhp)/2;
+  const x = Math.round((ev.clientX - ox)/k), y = Math.round((ev.clientY - oy)/k);
+  if(x < 0 || y < 0 || x >= dw || y >= dh) return null;
+  return {x, y};
+}
+function ripple(ev){
+  const box = $("liveBox"); if(!box) return;
+  const r = box.getBoundingClientRect();
+  const d = document.createElement("i"); d.className = "ripple";
+  d.style.left = (ev.clientX - r.left) + "px";
+  d.style.top  = (ev.clientY - r.top)  + "px";
+  box.appendChild(d); setTimeout(() => d.remove(), 380);
+}
+let pStart = null;
+const liveBoxEl = $("liveBox");
+if(liveBoxEl){
+  liveBoxEl.addEventListener("pointerdown", ev => {
+    if(liveOff.classList.contains("show")) return;      // 离线唔送输入
+    const p = toDev(ev); if(!p) return;
+    pStart = {p, t:Date.now(), x:ev.clientX, y:ev.clientY};
+    try{ liveBoxEl.setPointerCapture(ev.pointerId); }catch(_){}
+  });
+  liveBoxEl.addEventListener("pointerup", async ev => {
+    if(!pStart) return;
+    const s0 = pStart; pStart = null;
+    const dist = Math.hypot(ev.clientX - s0.x, ev.clientY - s0.y);
+    const dt = Date.now() - s0.t;
+    ripple(ev);
+    try{
+      if(dist < 9 && dt < 600){
+        await postJSON("/device/tap", {x:s0.p.x, y:s0.p.y});
+      }else{
+        const e = toDev(ev); if(!e) return;
+        await postJSON("/device/swipe", {x1:s0.p.x, y1:s0.p.y, x2:e.x, y2:e.y,
+                                         ms:Math.max(80, Math.min(900, dt))});
+      }
+    }catch(_){}
+    if(liveBusy) await new Promise(r => setTimeout(r, 90));
+    refreshLive(true);
+  });
+  liveBoxEl.addEventListener("pointercancel", () => { pStart = null; });
+}
+$("keypad")?.addEventListener("click", async ev => {
+  const btn = ev.target.closest(".kbtn"); if(!btn) return;
+  btn.style.opacity = ".55";
+  try{ await postJSON("/device/key", {key:btn.dataset.key}); }catch(_){}
+  finally{ setTimeout(() => btn.style.opacity = "", 220); }
+  if(liveBusy) await new Promise(r => setTimeout(r, 90));
+  refreshLive(true);
+});
 
 // ── 点实况窗放大（Esc / 点背景关）──
 const lb = $("lb"), lbImg = $("lbImg");
