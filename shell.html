@@ -145,7 +145,9 @@
   .n.xs.skip{opacity:.42;filter:saturate(.35)}
   .n.xs.miss{opacity:.5}
   .n.xs.miss b{text-decoration:line-through;text-decoration-thickness:1px}
-  .n.xs.ok{border-color:var(--ok)}
+  .n.xs.ok{border-color:var(--ok);box-shadow:inset 0 0 0 1px var(--ok);
+           background:color-mix(in srgb, var(--ok) 10%, var(--panel2));background-image:none}
+  .n.xs.ok b{color:var(--ok)}
   /* 状态条 Step 层下方：执行层调用占比（按单计，每单只用一层） */
   .lstat{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:6px;font-size:9px;color:var(--soft)}
   .lstat:empty{display:none}
@@ -154,7 +156,16 @@
   .lstat .bar{display:inline-block;width:44px;height:4px;border-radius:2px;background:var(--line);overflow:hidden}
   .lstat .bar i{display:block;height:100%;border-radius:2px;background:var(--acc1)}
   .lstat .it.zero{opacity:.42}
-  .lstat .it.now .bar i{background:var(--ok)}
+  /* 等你接手：提示气泡 + 继续按钮 */
+  .b.hand{background:color-mix(in srgb, var(--warn) 12%, var(--panel));color:var(--fg);
+          border:1px solid color-mix(in srgb, var(--warn) 45%, transparent)}
+  .handbox{display:flex;gap:6px;align-items:center;margin-top:6px;max-width:78%}
+  .handbox input{flex:1;min-width:120px;height:24px;border-radius:999px;padding:4px 10px;font-size:9px;
+                 background:var(--panel);border:1px solid var(--line);color:var(--fg)}
+  .handbox input::placeholder{color:var(--soft)}
+  .handbox .pick{flex:0 0 auto}
+  .lstat .it.cur{color:var(--fg);font-weight:650}
+  .lstat .it.cur .bar i{background:var(--ok)}
   .status{display:flex;align-items:flex-end;gap:14px;margin-top:18px;flex-wrap:wrap}
   .now{font-size:15.0px;font-weight:700;letter-spacing:.1.5px;line-height:1.2}
   .stepno{font:9.0px/1.6 ui-monospace,Menlo,monospace;color:var(--soft);letter-spacing:.3.75px;
@@ -766,7 +777,7 @@ function layerMark(o){
   if(o.ok){
     LAYER_USED = o.layer; LAYER_LABEL = o.label || "";
     LSTATE[o.layer] = "hit";
-    if(sm) sm.textContent = (o.ms ? o.ms + " ms" : "命中");
+    if(sm) sm.textContent = (o.ms ? "命中 · " + o.ms + " ms" : "命中");
     if(o.layer !== "L2") LSTATE["L2"] = LSTATE["L2"] || "skip";
     for(const L of ["L0","L1a","L1b"]){        // 前面被跳过嘅层标「未命中」
       if(L !== o.layer && !LSTATE[L]) LSTATE[L] = "miss";
@@ -945,8 +956,21 @@ function typing(on){
     typingWrap.append(b); chatEl.append(typingWrap); lastSide = "bot"; scrollDown(true);
   }else if(typingWrap){ typingWrap.remove(); typingWrap = null; }
 }
+function resumeCard(base, of){
+  const card = lastTaskCardEl;
+  if(!card){ taskStart(); return; }
+  card.classList.remove("bad", "done");
+  STEP_BASE = base || 0; STEP_OF = of || STEP_OF;
+  const txt = card.querySelector(".t-txt"); if(txt) txt.textContent = "续跑中";
+  const ico = card.querySelector(".t-hd svg"); if(ico) ico.style.stroke = "#FBBF24";
+  const sp = card.querySelector(".t-step");
+  if(sp) sp.textContent = "STEP " + String(STEP_BASE).padStart(2, "0") + " / " + String(STEP_OF).padStart(2, "0");
+  const dt = card.querySelector(".t-dt"); if(dt) dt.textContent = "你已接手，由当前画面继续";
+  taskCard = card; scrollDown(); return card;
+}
 function taskStart(){
   const card = document.createElement("div"); card.className = "task";
+  STEP_BASE = 0;
   STEP_OF = 0; STEP_NOW = 0;                       // 每单清零，唔累计上一单步数
   $("now") && ($("now").textContent = "交畀 /turn");
   if(typeof stepEl !== "undefined" && stepEl){ stepEl.textContent = ""; }
@@ -985,7 +1009,7 @@ function layerStats(stats, total, used){
   KEYS.forEach((L, i) => {
     const c = stats[L] || 0, p = pc[i];
     const it = document.createElement("span");
-    it.className = "it" + (c ? "" : " zero") + (L === used ? " now" : "");
+    it.className = "it" + (c ? "" : " zero") + (L === used ? " cur" : "");
     it.title = L + "：" + c + " / " + total + " 单";
     it.innerHTML = L + '<span class="bar"><i style="width:' + p + '%"></i></span>'
                  + '<span>' + p + '% · ' + c + '</span>';
@@ -995,9 +1019,10 @@ function layerStats(stats, total, used){
   if(host){ host.replaceChildren(...box.childNodes); }
   scrollDown();
 }
+let STEP_BASE = 0;                       // 续跑时前面已用嘅步数
 function taskUpdate(st){
   if(!taskCard) return;
-  const step = st.step || 0, of = st.of || STEP_OF || 20;
+  const step = (st.step || 0) + STEP_BASE, of = st.of || STEP_OF || 20;
   taskCard.querySelector(".t-step").textContent = "STEP " + String(step).padStart(2,"0") + " / " + String(of).padStart(2,"0");
   taskCard.querySelector(".t-bar i").style.width = Math.round(100 * step / of) + "%";
   const d = st.thought || st.action || "";
@@ -1009,20 +1034,9 @@ function taskFinish(ok, msg){
   taskCard = null;
 }
 
-async function submit(forceMode, echoText){
-  const text = (echoText !== undefined ? echoText : input.value).trim();
-  if(!text) return;
-  input.value = ""; input.style.height = "auto";
-  send.disabled = true;
-  say("me", text);
-  typing(true);
-  const mode = forceMode || "auto";
-  layerReset();
-  try{
-    const resp = await fetch("/turn", {method:"POST", headers:{"Content-Type":"application/json"},
-                                      body: JSON.stringify({text, mode})});
-    if(!resp.ok){ typing(false); say("bot", "服务器返 " + resp.status); return; }
-    const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = "";
+// SSE 消费：/turn 同 /turn/resume 共用
+async function pump(resp, text){
+  const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = "";
     while(true){
       const {value, done} = await reader.read(); if(done) break;
       buf += dec.decode(value, {stream:true});
@@ -1039,6 +1053,8 @@ async function submit(forceMode, echoText){
           if(o.mode === "task"){ typing(false); paint({phase:"turn"}); }
         }else if(ev === "layer"){
           layerMark(o);
+        }else if(ev === "resume_started"){
+          typing(false); resumeCard(o.base, o.of);
         }else if(ev === "task_started"){
           typing(false); chip("<b>1 条任务</b> · 交畀 Mobilerun"); taskStart();
         }else if(ev === "chat"){
@@ -1067,6 +1083,8 @@ async function submit(forceMode, echoText){
             paint(o);
           }
           if(o.phase === "act") refreshLive(true);
+        }else if(ev === "need_hand"){
+          needHand(o);
         }else if(ev === "needs_human"){
           typing(false);
           if(!taskCard){                          // 未开跑就失败（例如云机未就绪）：至少讲一声
@@ -1086,6 +1104,54 @@ async function submit(forceMode, echoText){
         /* status / trajectory / progress：过程图已表达，唔再刷屏 */
       }
     }
+}
+
+// 人工接管后：用户按「已处理好，继续」
+async function resumeTurn(note){
+  send.disabled = true; typing(true); layerReset();
+  try{
+    const resp = await fetch("/turn/resume", {method:"POST", headers:{"Content-Type":"application/json"},
+                                              body: JSON.stringify({note: note || ""})});
+    if(!resp.ok){ typing(false); say("bot", "续跑失败：服务器返 " + resp.status); return; }
+    await pump(resp, "");
+  }catch(e){
+    typing(false); say("bot", "续跑出错：" + e);
+  }finally{
+    send.disabled = false; input.focus(); refreshStatus();
+  }
+}
+
+// 需要人接手（登录 / 验证码 / 手动点完）
+function needHand(o){
+  typing(false);
+  const g = document.createElement("div"); g.className = "g bot";
+  const w = document.createElement("div"); w.className = "who"; w.textContent = "云机 · 等你接手";
+  const b = document.createElement("div"); b.className = "b bot hand";
+  b.textContent = "⚠️ " + String(o.reason || "要你处理一下").replace(/^Goal failed:\s*/, "")
+                + "（已用 " + (o.used ?? "?") + "/" + (o.of ?? "?")
+                + " 步，第 " + (o.round || 1) + "/" + (o.max || 1) + " 次机会）";
+  const box = document.createElement("div"); box.className = "handbox";
+  const inp = document.createElement("input"); inp.placeholder = "你处理咗咩？可留空";
+  const btn = document.createElement("button"); btn.className = "pick"; btn.textContent = "我已处理好，继续";
+  btn.addEventListener("click", () => { btn.disabled = true; box.remove(); resumeTurn(inp.value.trim()); });
+  box.append(inp, btn);
+  g.append(w, b, box); chatEl.append(g); lastSide = "bot"; scrollDown(true);
+}
+
+async function submit(forceMode, echoText){
+  const text = (echoText !== undefined ? echoText : input.value).trim();
+  if(!text) return;
+  input.value = ""; input.style.height = "auto";
+  send.disabled = true;
+  say("me", text);
+  typing(true);
+  const mode = forceMode || "auto";
+  layerReset();
+  try{
+    const resp = await fetch("/turn", {method:"POST", headers:{"Content-Type":"application/json"},
+                                      body: JSON.stringify({text, mode})});
+    if(!resp.ok){ typing(false); say("bot", "服务器返 " + resp.status); return; }
+    await pump(resp, text);
   }catch(e){
     typing(false); say("bot", "出错：" + e); paint({phase:"idle"});
   }finally{

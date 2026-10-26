@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.23</title>
+<title>QPhone 详细设计说明书 v0.24</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -51,10 +51,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.23</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.24</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.23</p>
+<p>版本：v0.24</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -209,6 +209,12 @@ strong{font-weight:700}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.24</td>
+<td>①修占比行「当前层」字数变大（class <code>now</code> 撞状态条 <code>.now{14.25px}</code>，改 <code>cur</code>）；②命中状态更显眼（绿框 + 淡绿底 + 副标「命中 · 354 ms」）；③新增<strong>人工接管后续跑</strong>：L2 失败唔再一刀切收工，改为弹接管卡，用户按「我已处理好，继续」由当前画面续跑，最多 3 次、步数累计到 20 步上限。</td>
+<td>C</td>
+<td><span class="nowrap">2026-10-26</span></td>
+</tr>
 <tr>
 <td>v0.23</td>
 <td>精简会话头条：删走「云机 · QPhone / ANDROID 13 · 端口」（右上角已有 localhost 即时状态）同「返桌面」按钮（实况区已有主页键），该行只留状态点 + 清空。</td>
@@ -1323,6 +1329,43 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <blockquote>
 <p>口径：<strong>按单计</strong>，唔系按调用次数——一单只会落到一层（短路降级），所以四层百分比加起来 100%（用最大余数法取整，唔会出现 63%+38%=101%）。</p>
 </blockquote>
+<h4>3.4.15 人工接管后续跑</h4>
+<p>以前 L2 一失败就整单收工（例如撞到登录墙、验证码）。现在改成<strong>可暂停可续跑</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一次失败</td>
+<td>服务端记低 <code>RUN = {text, used, of, round, active}</code>，推 <code>need_hand</code>（原因 / 已用步数 / 第几次机会），<code>result</code> 带 <code>resumable: true</code></td>
+</tr>
+<tr>
+<td>壳</td>
+<td>弹「云机 · 等你接手」卡 + 输入框（可写你处理咗咩）+ 「我已处理好，继续」按钮</td>
+</tr>
+<tr>
+<td>用户点击</td>
+<td><code>POST /turn/resume {note}</code> → 由<strong>当前画面</strong>续跑，prompt 带「用户已接管处理：…／唔好重做已完成步骤」</td>
+</tr>
+<tr>
+<td>步数</td>
+<td>累计唔重置：续跑用剩余步数（<code>of - used</code>），壳显示累加后嘅 <code>STEP 10 / 20</code></td>
+</tr>
+<tr>
+<td>上限</td>
+<td>最多 <code>QPHONE_RESUME</code>（默认 3）次；用尽或步数耗尽 → 正常失败收工</td>
+</tr>
+<tr>
+<td>同卡</td>
+<td>续跑用 <code>resume_started</code> 事件（唔系 <code>task_started</code>），复用原来嗰张任务卡，唔会开新卡</td>
+</tr>
+</tbody>
+</table>
+<p>坑：<code>step</code> 事件由 Mobilerun 自己数，续跑会由 1 重新数，所以壳要 <code>STEP_BASE</code> 加返前面用咗嘅步数。</p>
 <h2>4. 用户界面详细设计</h2>
 <h3>4.1 界面结构</h3>
 <p>主界面是壳里的对话。本文不重画这个界面。</p>

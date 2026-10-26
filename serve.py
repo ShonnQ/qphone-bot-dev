@@ -308,6 +308,78 @@ def qphone_status() -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def _exec_l2(q, prompt: str, steps: int, started: float):
+    """跑一次 Mobilerun，返 (success, message, traj_dir, 用咗几步)。"""
+    provider, base, key = llm_route()
+    cmd = [
+        mobilerun_bin(), "run", prompt,
+        "--device", TARGET,
+        "--provider", provider,
+        "--model", MODEL,
+        "--api_base", base,
+        "--vision", "--steps", str(max(1, int(steps))),
+        "--save-trajectory", "step",
+    ]
+    env = os.environ.copy()
+    env.setdefault("DEEPSEEK_API_KEY", env.get("HERMES_CUSTOM_QBRIDGE_API_KEY", ""))
+    env["XAI_API_KEY"] = key
+    env["DEEPSEEK_API_KEY"] = key
+    env["OPENAI_API_KEY"] = key
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, bufsize=1, env=env)
+    success, message, collecting, traj_dir, maxstep = False, "", False, "", 0
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        line = line.rstrip("\n")
+        if not line.strip():
+            continue
+        m_st = re.match(r"🔄\s*Step (\d+)/(\d+)", line.strip())
+        if m_st:
+            maxstep = max(maxstep, int(m_st.group(1)))
+        _track(line, q)
+        m_tr = re.search(r"Trajectory (?:saved|folder):\s*(/\S+)", line)
+        if m_tr:
+            traj_dir = m_tr.group(1).rstrip("。.,")
+            continue
+        if "🎉 Goal achieved" in line:
+            success, collecting = True, True
+            message = line.split("Goal achieved:", 1)[-1].strip()
+            continue
+        if collecting:
+            bare = line.strip()
+            if bare.startswith("/"):
+                traj_dir = bare.rstrip("。.,")
+                continue
+            if "📁" in line:
+                m2 = re.search(r"(/\S+)", line)
+                if m2:
+                    traj_dir = m2.group(1).rstrip("。.,")
+                continue
+            message = (message + line.strip()) if message else line.strip()
+            continue
+        if line.strip().startswith("/") and "trajectories" in line:
+            traj_dir = line.strip().rstrip("。.,")
+            continue
+        if "❌" in line or "Goal failed" in line:
+            message = line.replace("❌", "").strip()
+            continue
+        if line.lstrip().startswith(("1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.")):
+            continue
+        q.put(("progress", {"line": line[:400]}))
+    proc.wait(timeout=30)
+    tid = ""
+    if traj_dir:
+        tp = Path(traj_dir)
+        if tp.is_dir():
+            TRAJ_DIRS[tp.name] = tp
+            tid = tp.name
+    if not tid:
+        tid = latest_trajectory(started)
+    if tid:
+        q.put(("trajectory", {"id": tid}))
+    return success, message, tid, maxstep
+
+
 def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
     """跑 Mobilerun，把输出翻译成壳认嘅事件。"""
     started = time.time()
@@ -342,93 +414,94 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
     q.put(("layer", {"layer": "L2", "label": "转视觉（Mobilerun）", "cmds": ["mobilerun run"],
                      "ms": 0, "ok": True, "why": why}))
     lstats, ltot = layer_bump("L2")
+    RUN.update(text=text, used=0, of=int(STEPS), round=0, active=True, note="")
     try:
-        cmd = [
-            mobilerun_bin(), "run", text,
-            "--device", TARGET,
-            "--provider", route[0],
-            "--model", MODEL,
-            "--api_base", route[1],
-            "--vision", "--steps", STEPS,
-            "--save-trajectory", "step",       # 出截图 + 轨迹，落轨迹页
-        ]
-        env = os.environ.copy()
-        env.setdefault("DEEPSEEK_API_KEY", env.get("HERMES_CUSTOM_QBRIDGE_API_KEY", ""))
-        env["XAI_API_KEY"] = route[2]
-        env["DEEPSEEK_API_KEY"] = route[2]
-        env["OPENAI_API_KEY"] = route[2]
-        proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1, env=env,
-        )
-        success, message, collecting = False, "", False
-        traj_dir = ""
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            line = line.rstrip("\n")
-            if not line.strip():
-                continue
-            _track(line, q)
-            m_tr = re.search(r"Trajectory (?:saved|folder):\s*(/\S+)", line)
-            if m_tr:
-                traj_dir = m_tr.group(1).rstrip("。.,")
-                continue
-            if "🎉 Goal achieved" in line:
-                success, collecting = True, True
-                message = line.split("Goal achieved:", 1)[-1].strip()
-                continue
-            if collecting:
-                bare = line.strip()
-                if bare.startswith("/"):          # 轨迹路径单独一行
-                    traj_dir = bare.rstrip("。.,")
-                    continue
-                if "📁" in line:      # 轨迹行夹埋喺结果后面，唔好收进 message
-                    m2 = re.search(r"(/\S+)", line)
-                    if m2:
-                        traj_dir = m2.group(1).rstrip("。.,")
-                    continue
-                # CLI 会把结果按终端宽度折行，续行要接返埋
-                message = (message + line.strip()) if message else line.strip()
-                continue
-            if line.strip().startswith("/") and "trajectories" in line:
-                traj_dir = line.strip().rstrip("。.,")
-                continue
-            if "❌" in line or "Goal failed" in line:
-                message = line.replace("❌", "").strip()
-                continue
-            # 工具调用 XML 对壳冇意义，唔好推出去
-            if line.lstrip().startswith(("<", "1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.")):
-                continue
-            q.put(("progress", {"line": line[:400]}))
-        proc.wait(timeout=30)
-        tid = ""
-        if traj_dir:
-            tp = Path(traj_dir)
-            if tp.is_dir():
-                TRAJ_DIRS[tp.name] = tp
-                tid = tp.name
-        if not tid:
-            tid = latest_trajectory(started)
-        if tid:
-            q.put(("trajectory", {"id": tid}))
+        success, message, tid, used = _exec_l2(q, text, int(STEPS), started)
+        RUN["used"] = used
         LAST_RESULT.update(ok=bool(success), msg=message or "", ts=time.time())
         hist_task_update(CURRENT_TASK["id"], phase="done" if success else "human",
                          msg=(message or "")[:300])
         if success:
+            RUN["active"] = False
             _pub(q, "done", action="")
             q.put(("result", {"success": True, "message": message or "做完",
                               "layer_stats": lstats, "layer_total": ltot}))
         else:
-            _pub(q, "human", action="")
-            q.put(("needs_human", {"reason": message or "agent 未做到，需要人睇屏"}))
-            q.put(("result", {"success": False, "message": message or "未做到",
-                              "layer_stats": lstats, "layer_total": ltot}))
-        if HOME_AFTER:
-            press_home()                     # 收尾：任务完就返桌面，唔留低上个 app
+            left = max(0, int(STEPS) - RUN["used"])
+            if RUN["round"] < MAX_RESUME and left > 0:
+                # 唔收工：交畀人接手（例如要登录），用户按「已完成」就续跑
+                _pub(q, "human", action="")
+                q.put(("need_hand", {"reason": message or "agent 未做到，要人接手",
+                                     "used": RUN["used"], "of": int(STEPS), "left": left,
+                                     "round": RUN["round"] + 1, "max": MAX_RESUME}))
+                q.put(("result", {"success": False, "resumable": True,
+                                  "message": message or "要你接手处理一下",
+                                  "layer_stats": lstats, "layer_total": ltot}))
+            else:
+                RUN["active"] = False
+                _pub(q, "human", action="")
+                q.put(("needs_human", {"reason": message or "agent 未做到，需要人睇屏"}))
+                q.put(("result", {"success": False, "message": message or "未做到",
+                                  "layer_stats": lstats, "layer_total": ltot}))
+        if HOME_AFTER and success:
+            press_home()
     except Exception as e:  # noqa: BLE001
         q.put(("needs_human", {"reason": f"控制程序出错：{e}"}))
         q.put(("result", {"success": False, "message": str(e),
                           "layer_stats": dict(LAYER_STATS), "layer_total": sum(LAYER_STATS.values())}))
+    finally:
+        q.put(("_end", {}))
+
+
+# ── 人工接管后续跑（登录 / 验证码 / 手动点完再继续）──
+RUN = {"text": "", "used": 0, "of": int(STEPS), "round": 0, "active": False, "note": ""}
+MAX_RESUME = int(os.environ.get("QPHONE_RESUME", "3"))
+
+
+def run_resume(q, note: str) -> None:
+    if not RUN.get("active"):
+        q.put(("result", {"success": False, "message": "冇等待续跑嘅任务"}))
+        q.put(("_end", {}))
+        return
+    RUN["round"] += 1
+    left = max(1, RUN["of"] - RUN["used"])
+    prompt = (f"继续完成同一个任务：{RUN['text']}\n"
+              f"用户已经接管处理：{note or '已处理好'}\n"
+              f"请由当前屏幕状态继续，唔好重做已完成嘅步骤。")
+    q.put(("progress", {"line": f"用户已接手（第 {RUN['round']}/{MAX_RESUME} 次续跑），剩余 {left} 步"}))
+    q.put(("layer", {"layer": "L2", "label": f"续跑 · 第 {RUN['round']} 次",
+                     "cmds": ["mobilerun run"], "ms": 0, "ok": True, "why": "人工接管后继续"}))
+    lstats, ltot = dict(LAYER_STATS), sum(LAYER_STATS.values())
+    try:
+        success, message, tid, used = _exec_l2(q, prompt, left, time.time())
+        RUN["used"] = min(RUN["of"], RUN["used"] + used)
+        LAST_RESULT.update(ok=bool(success), msg=message or "", ts=time.time())
+        hist_task_update(CURRENT_TASK["id"], phase="done" if success else "human",
+                         msg=(message or "")[:300])
+        if success:
+            RUN["active"] = False
+            _pub(q, "done", action="")
+            q.put(("result", {"success": True, "message": message or "续跑做完",
+                              "layer_stats": lstats, "layer_total": ltot}))
+        else:
+            left2 = max(0, RUN["of"] - RUN["used"])
+            if RUN["round"] < MAX_RESUME and left2 > 0:
+                _pub(q, "human", action="")
+                q.put(("need_hand", {"reason": message or "仲系要人接手", "used": RUN["used"],
+                                     "of": RUN["of"], "left": left2,
+                                     "round": RUN["round"] + 1, "max": MAX_RESUME}))
+                q.put(("result", {"success": False, "resumable": True,
+                                  "message": message or "仲要你接手一下",
+                                  "layer_stats": lstats, "layer_total": ltot}))
+            else:
+                RUN["active"] = False
+                _pub(q, "human", action="")
+                q.put(("needs_human", {"reason": message or "续跑都唔成功"}))
+                q.put(("result", {"success": False, "message": message or "续跑未做到",
+                                  "layer_stats": lstats, "layer_total": ltot}))
+    except Exception as e:  # noqa: BLE001
+        q.put(("needs_human", {"reason": f"续跑出错：{e}"}))
+        q.put(("result", {"success": False, "message": str(e)}))
     finally:
         q.put(("_end", {}))
 
@@ -1164,6 +1237,49 @@ class Handler(BaseHTTPRequestHandler):
             CURRENT_TASK["id"] = ""
             LAST_RESULT.update(ok=None, msg="", ts=0.0)
             return self._send_json({"ok": True, "cleared": n})
+        # ── 人工接管后续跑：用户按「我已处理好，继续」──
+        if self.path == "/turn/resume":
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                p = json.loads(self.rfile.read(length) or b"{}")
+            except json.JSONDecodeError:
+                return self._send_json({"ok": False, "error": "body 要系 JSON"}, 400)
+            if not RUN.get("active"):
+                return self._send_json({"ok": False, "error": "冇等待续跑嘅任务"}, 409)
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            KIND2 = {"activity": "task", "status": "status", "progress": "task", "result": "task",
+                     "needs_human": "human", "need_hand": "human", "trajectory": "task",
+                     "chat": "chat", "clarify": "unclear", "intent": "meta", "layer": "task", "need_hand": "human",
+                     "resume_started": "task"}
+            alive2 = {"ok": True}
+
+            def emit2(event: str, data: dict) -> None:
+                if not alive2["ok"]:
+                    return
+                data = dict(data)
+                data.setdefault("kind", KIND2.get(event, event))
+                try:
+                    self.wfile.write(f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode())
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    alive2["ok"] = False
+
+            emit2("intent", {"mode": "task", "why": "人工接管后续跑", "text": RUN["text"]})
+            emit2("resume_started", {"id": CURRENT_TASK["id"], "of": RUN["of"], "base": RUN["used"],
+                                     "round": RUN["round"]})
+            q2: "queue.Queue[tuple[str, dict]]" = queue.Queue()
+            threading.Thread(target=run_resume, args=(q2, (p.get("note") or "").strip()), daemon=True).start()
+            while True:
+                ev, dt = q2.get()
+                if ev == "_end":
+                    break
+                emit2(ev, dt)
+            return
         if self.path != "/turn":
             return self._send_json({"ok": False, "error": "唔识呢条路径"}, 404)
         length = int(self.headers.get("Content-Length") or 0)
