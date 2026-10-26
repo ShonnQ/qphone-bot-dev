@@ -306,6 +306,9 @@
          border:1px solid rgba(125,211,252,.32);
          border-radius:4px;overflow:hidden;background:var(--bezel)}
   .livepanel .phone img{width:100%;height:100%;object-fit:contain;display:block}
+  .livepanel .phone canvas{position:absolute;inset:0;width:100%;height:100%;display:none}
+  .livepanel.streaming .phone canvas{display:block}
+  .livepanel.streaming .phone img{display:none}
   .livepanel .off{position:absolute;inset:0;display:none;place-content:center;justify-items:center;gap:5px;
        color:#9fb3c4;font:7.5px/1 ui-monospace,Menlo,monospace;background:rgba(3,6,10,.72);
        text-align:center;padding:0 10px}
@@ -638,6 +641,7 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
 <aside class="livepanel">
   <div class="lp-head"><i class="ldot" id="ldot"></i><b>云机实况</b><span id="liveRes">—</span></div>
   <div class="phone" id="liveBox" title="点一下＝点云机，拖动＝滑动">
+    <canvas id="liveCanvas" width="720" height="1280"></canvas>
     <img id="liveImg" alt="云机画面">
     <div class="off" id="liveOff"><b>云机离线</b><small id="liveOffSub">画面系旧帧</small></div>
   </div>
@@ -1060,7 +1064,13 @@ async function refreshLive(force){
     const probe = new Image();
     await new Promise((res, rej) => { probe.onload = res; probe.onerror = rej; probe.src = url; });
     if(liveURL) URL.revokeObjectURL(liveURL);
-    liveURL = url; liveImg.src = url;
+    liveURL = url;
+    if(document.querySelector(".livepanel").classList.contains("streaming")){
+      const im = new Image(); im.onload = () => cx2d.drawImage(im, 0, 0, canvas.width, canvas.height);
+      im.src = url;
+    }else{
+      liveImg.src = url;
+    }
     $("liveRes").textContent = probe.naturalWidth + "×" + probe.naturalHeight;
     const ls = $("liveSize"); if(ls) ls.textContent = probe.naturalWidth + "×" + probe.naturalHeight;
     // 帧龄：>6s 视为旧帧（云机可能断线，因为落盘缓存仲画得出嘢）
@@ -1083,6 +1093,118 @@ async function refreshLive(force){
   finally{ clearTimeout(kill); liveBusy = false; }
 }
 
+// ── 方案 B：H.264 实时流（WebCodecs 硬解 → canvas）──
+const canvas = $("liveCanvas"), cx2d = canvas.getContext("2d", {alpha:false, desynchronized:true});
+let vdec = null, vcfgKey = "", streamOn = false, sIdx = 0, pendingCfg = [], lastFrames = 0, fpsAt = 0, fps = 0;
+window.__st = {frames:0, cfg:"", err:"", bytes:0, nals:0, state:"idle"};
+let sps = null, pps = null, lastFrameAt = 0;
+
+function codecOf(sps){                       // avc1.PPCCLL
+  const h = b => b.toString(16).padStart(2, "0");
+  return "avc1." + h(sps[1]) + h(sps[2]) + h(sps[3]);
+}
+function avcC(sps, pps){                     // 自己拼 AVCDecoderConfigurationRecord
+  const out = new Uint8Array(11 + sps.length + pps.length);
+  let i = 0;
+  out[i++] = 1;                              // configurationVersion
+  out[i++] = sps[1]; out[i++] = sps[2]; out[i++] = sps[3];   // profile / compat / level
+  out[i++] = 0xFC | 3;                       // lengthSizeMinusOne = 3（4 字节长度前缀）
+  out[i++] = 0xE0 | 1;                       // numOfSequenceParameterSets = 1
+  out[i++] = (sps.length >> 8) & 0xFF; out[i++] = sps.length & 0xFF;
+  out.set(sps, i); i += sps.length;
+  out[i++] = 1;                              // numOfPictureParameterSets
+  out[i++] = (pps.length >> 8) & 0xFF; out[i++] = pps.length & 0xFF;
+  out.set(pps, i);
+  return out;
+}
+function ensureDecoder(sps, pps){
+  const codec = codecOf(sps);
+  if(vdec && vcfgKey === codec) return true;
+  try{ vdec && vdec.close(); }catch(_){}
+  vdec = new VideoDecoder({
+    output(frame){ cx2d.drawImage(frame, 0, 0, canvas.width, canvas.height); frame.close();
+                   lastFrames++; window.__st.frames++; lastFrameAt = performance.now(); },
+    error(e){ window.__st.err = String(e && e.message || e); console.warn("decoder", e); streamOn = false; document.querySelector(".livepanel").classList.remove("streaming");
+              setTimeout(startStream, 1500); }
+  });
+  vdec.configure({codec, codedWidth:canvas.width, codedHeight:canvas.height,
+                  description: avcC(sps, pps), optimizeForLatency:true});
+  vcfgKey = codec; window.__st.cfg = codec;
+  return true;
+}
+let streamCtl = null, needFresh = false;
+async function startStream(){
+  if(streamOn || !("VideoDecoder" in window)) return;
+  streamOn = true;
+  streamCtl = new AbortController();
+  try{
+    const qs = "?t=" + Date.now() + (needFresh ? "&fresh=1" : "");
+    needFresh = false;
+    const r = await fetch("/stream" + qs, {cache:"no-store", signal:streamCtl.signal});
+    if(!r.ok || !r.body) throw new Error("stream HTTP " + r.status);
+    const reader = r.body.getReader();
+    let acc = new Uint8Array(0);
+    document.querySelector(".livepanel").classList.add("streaming");
+    fpsAt = performance.now();
+    while(true){
+      const {value, done} = await reader.read();
+      if(done) break;
+      window.__st.bytes += value.length; window.__st.state = "reading";
+      // 拼包：4B len + 1B kind + 4B ts + payload
+      const merged = new Uint8Array(acc.length + value.length);
+      merged.set(acc); merged.set(value, acc.length);
+      acc = merged;
+      let off = 0;
+      while(acc.length - off >= 9){
+        const len = (acc[off]<<24 | acc[off+1]<<16 | acc[off+2]<<8 | acc[off+3]) >>> 0;
+        if(acc.length - off < 9 + len) break;
+        const kind = acc[off+4]; window.__st.nals++;
+        const ts = (acc[off+5]<<24 | acc[off+6]<<16 | acc[off+7]<<8 | acc[off+8]) >>> 0;
+        const nal = acc.subarray(off+9, off+9+len);
+        off += 9 + len;
+        if(kind === 3){                         // SPS / PPS / AUD
+          const t = nal[0] & 0x1F;
+          if(t === 7) sps = nal;
+          else if(t === 8) pps = nal;
+          if(sps && pps){ try{ ensureDecoder(sps, pps); }catch(_){} }
+          continue;
+        }
+        if(!vdec || vcfgKey === "") continue;
+        const data = new Uint8Array(4 + nal.length);       // AVCC：4 字节长度 + NAL
+        new DataView(data.buffer).setUint32(0, nal.length);
+        data.set(nal, 4);
+        try{
+          vdec.decode(new EncodedVideoChunk({type: kind === 1 ? "key" : "delta",
+                                             timestamp: ts * 1000, data}));
+        }catch(e){
+          window.__st.err = "decode " + e;
+          if(String(e).includes("key frame")){          // 中途接入冇 IDR：重开一路流
+            needFresh = true;
+            try{ streamCtl.abort(); }catch(_){}
+            break;
+          }
+        }
+        sIdx = ts;
+      }
+      acc = acc.subarray(off);
+      if(acc.length > 8*1024*1024) acc = new Uint8Array(0);
+    }
+  }catch(e){
+    console.warn("stream 断", e);
+  }finally{
+    streamOn = false;
+    document.querySelector(".livepanel").classList.remove("streaming");
+    try{ vdec && vdec.close(); }catch(_){}
+    vdec = null; vcfgKey = ""; sps = null; pps = null;
+    setTimeout(startStream, 400);                     // 到期 / 要关键帧，重连
+  }
+}
+setInterval(() => {                                  // fps 读数（放喺实况底行）
+  const now = performance.now(), dt = (now - fpsAt)/1000;
+  if(dt >= 1){ fps = Math.round(lastFrames/dt); lastFrames = 0; fpsAt = now;
+    const ls = $("liveSize"); if(ls && streamOn) ls.textContent = "720×1280 · " + fps + "fps"; }
+}, 1000);
+
 // ── 实况窗嘅「手」：点／拖动 → 设备坐标（含涟漪反馈）──
 async function postJSON(url, body){
   const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"},
@@ -1096,8 +1218,9 @@ function devSize(){
   return m ? {w:+m[1], h:+m[2]} : {w:720, h:1280};
 }
 function toDev(ev){                       // contain 之下要减走黑边，先算真实绘制区
-  const img = $("liveImg"), r = img.getBoundingClientRect();
-  if(!img.naturalWidth) return null;
+  const el = document.querySelector(".livepanel").classList.contains("streaming") ? $("liveCanvas") : $("liveImg");
+  const r = el.getBoundingClientRect();
+  if(!r.width) return null;
   const {w:dw, h:dh} = devSize();
   const k = Math.min(r.width/dw, r.height/dh);
   const dwp = dw*k, dhp = dh*k;
@@ -1129,31 +1252,34 @@ if(liveBoxEl){
     const dist = Math.hypot(ev.clientX - s0.x, ev.clientY - s0.y);
     const dt = Date.now() - s0.t;
     ripple(ev);
+    const wantFrame = !streamOn;                  // 流模式下画面由视频流更新，唔等截图
     try{
       if(dist < 9 && dt < 600){
-        await postJSON("/device/tap", {x:s0.p.x, y:s0.p.y});
+        await postJSON("/device/tap", {x:s0.p.x, y:s0.p.y, frame:wantFrame});
       }else{
         const e = toDev(ev); if(!e) return;
         await postJSON("/device/swipe", {x1:s0.p.x, y1:s0.p.y, x2:e.x, y2:e.y,
-                                         ms:Math.max(80, Math.min(900, dt))});
+                                         ms:Math.max(80, Math.min(900, dt)), frame:wantFrame});
       }
     }catch(_){}
-    if(liveBusy) await new Promise(r => setTimeout(r, 90));
-    refreshLive(true);
+    if(wantFrame){ if(liveBusy) await new Promise(r => setTimeout(r, 90)); refreshLive(true); }
   });
   liveBoxEl.addEventListener("pointercancel", () => { pStart = null; });
 }
 $("keypad")?.addEventListener("click", async ev => {
   const btn = ev.target.closest(".kbtn"); if(!btn) return;
   btn.style.opacity = ".55";
-  try{ await postJSON("/device/key", {key:btn.dataset.key}); }catch(_){}
+  try{ await postJSON("/device/key", {key:btn.dataset.key, frame:!streamOn}); }catch(_){}
   finally{ setTimeout(() => btn.style.opacity = "", 220); }
-  if(liveBusy) await new Promise(r => setTimeout(r, 90));
-  refreshLive(true);
+  if(!streamOn){ if(liveBusy) await new Promise(r => setTimeout(r, 90)); refreshLive(true); }
 });
 
 
-setTimeout(() => { refreshLive(true); setInterval(refreshLive, 2600); }, 300);
+setTimeout(() => { refreshLive(true); startStream();
+                  setInterval(() => {
+                    const idle = performance.now() - lastFrameAt > 2500;
+                    if(!streamOn || idle) refreshLive();     // 无流 / 静态画面：用截图保鲜
+                  }, 2600); }, 300);
 document.addEventListener("visibilitychange", () => { if(!document.hidden) refreshLive(true); });
 
 </script>

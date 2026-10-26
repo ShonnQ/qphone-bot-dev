@@ -698,6 +698,139 @@ if(steps.length) focusStep(0);
     return "".join(out)
 
 
+# ─────────────────────────────── 实时视频流（方案 B：H.264 → WebCodecs）
+# 设备只允许一路 screenrecord，所以单路编码 + 广播畀所有浏览器。
+# 每帧格式：[4B 长度][1B 类型 1=IDR 2=普通帧 3=参数集][4B 时间戳 ms][payload]
+STREAM = {"clients": [], "proc": None, "thread": None, "lock": threading.Lock(), "param": b""}
+STREAM_IDLE_STOP = 8.0     # 冇客户端咁久就停编码，省 CPU
+
+
+def _nal_split(buf: bytes):
+    """Annex-B 切 NAL：返回 (完整 NAL 列表, 未收齐嘅尾巴)。"""
+    starts, i, n = [], 0, len(buf)
+    while i < n - 3:
+        if buf[i] == 0 and buf[i + 1] == 0 and buf[i + 2] == 1:
+            starts.append((i, 3)); i += 3
+        elif buf[i] == 0 and buf[i + 1] == 0 and buf[i + 2] == 0 and i + 3 < n and buf[i + 3] == 1:
+            starts.append((i, 4)); i += 4
+        else:
+            i += 1
+    if len(starts) < 2:
+        return [], buf
+    out = []
+    for k in range(len(starts) - 1):
+        pos, hdr = starts[k]
+        nxt = starts[k + 1][0]
+        nal = buf[pos + hdr:nxt]
+        if nal:
+            out.append(nal)
+    return out, buf[starts[-1][0]:]
+
+
+def _encoder_loop():
+    """一路 screenrecord，解析成帧广播；到期（180s）自动重开。"""
+    idle_since = None
+    while True:
+        with STREAM["lock"]:
+            if not STREAM["clients"]:
+                if idle_since is None:
+                    idle_since = time.time()
+                elif time.time() - idle_since > STREAM_IDLE_STOP:
+                    STREAM["thread"] = None
+                    return
+            else:
+                idle_since = None
+        if not STREAM["clients"]:
+            time.sleep(0.2); continue
+
+        t0 = time.time()
+        proc = subprocess.Popen(
+            [ADB, "-s", TARGET, "shell", "screenrecord",
+             "--output-format=h264", "--size", "720x1280",
+             "--bit-rate", "6000000", "--time-limit", "180", "-"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+        STREAM["proc"] = proc
+        buf = b""
+        try:
+            while True:
+                chunk = proc.stdout.read(65536)
+                if not chunk:
+                    break
+                buf += chunk
+                nals, buf = _nal_split(buf)
+                if not nals:
+                    continue
+                ts = int((time.time() - t0) * 1000) & 0xFFFFFFFF
+                payloads = []
+                for nal in nals:
+                    t = nal[0] & 0x1F
+                    kind = 3 if t in (7, 8, 9) else (1 if t == 5 else (2 if t in (1, 2) else 0))
+                    if not kind:
+                        continue
+                    payloads.append(len(nal).to_bytes(4, "big") + bytes([kind])
+                                    + ts.to_bytes(4, "big") + nal)
+                if not payloads:
+                    continue
+                blob = b"".join(payloads)
+                if any(p[4] == 1 for p in payloads):     # 出过 IDR，前端解码器先算「热」
+                    STREAM["warm"] = True
+                with STREAM["lock"]:
+                    for q in list(STREAM["clients"]):
+                        try:
+                            q.put_nowait(blob)
+                        except queue.Full:
+                            pass
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            try:
+                proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
+            STREAM["proc"] = None
+        time.sleep(0.15)
+
+
+def stream_h264(handler, fresh: bool = False) -> None:
+    """订阅广播：每个客户端一条队列，编码器一路。fresh=1 强制重开（拿新 SPS+IDR）。"""
+    q: "queue.Queue[bytes]" = queue.Queue(maxsize=240)
+    with STREAM["lock"]:
+        first = not STREAM["clients"]
+        STREAM["clients"].append(q)
+        warm = STREAM.get("warm", False)
+        # 编码器已经跑到中途：重开一路，令新客户端由 SPS + IDR 开始（否则解唔到）
+        if STREAM["proc"] is not None and (first or warm):
+            try:
+                STREAM["proc"].kill()
+            except Exception:  # noqa: BLE001
+                pass
+        if fresh and STREAM["proc"] is not None:
+            try:
+                STREAM["proc"].kill()
+            except Exception:  # noqa: BLE001
+                pass
+        STREAM["warm"] = False
+        if STREAM["thread"] is None or not STREAM["thread"].is_alive():
+            STREAM["thread"] = threading.Thread(target=_encoder_loop, daemon=True)
+            STREAM["thread"].start()
+    handler.send_response(200)
+    handler._cors()
+    handler.send_header("Content-Type", "application/octet-stream")
+    handler.send_header("Cache-Control", "no-store")
+    handler.end_headers()
+    try:
+        while True:
+            blob = q.get(timeout=15)
+            handler.wfile.write(blob)
+            handler.wfile.flush()
+    except (queue.Empty, BrokenPipeError, ConnectionResetError):
+        pass
+    finally:
+        with STREAM["lock"]:
+            if q in STREAM["clients"]:
+                STREAM["clients"].remove(q)
+
+
 # ─────────────────────────────── 帧缓存（启动优化）
 FRAME = {"png": b"", "ts": 0.0, "last_req": 0.0, "err": ""}
 FRAME_FILE = Path(os.environ.get("QPHONE_FRAME",
@@ -739,10 +872,11 @@ def device_input(path: str, p: dict) -> dict:
     if cp.returncode != 0:
         msg = (cp.stderr or cp.stdout).decode("utf-8", "ignore").strip()[:160]
         raise RuntimeError(msg or "adb 执行失败")
-    try:
-        grab_frame()
-    except Exception:  # noqa: BLE001
-        pass
+    if p.get("frame", True):
+        try:
+            grab_frame()
+        except Exception:  # noqa: BLE001
+            pass
     return {"ok": True, "input": path.rsplit("/", 1)[-1], "ms": int((time.time() - t0) * 1000)}
 
 
@@ -865,6 +999,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if path == "/stream":
+            return stream_h264(self, fresh="fresh=1" in (self.path or ""))
         if path in ("/screen.png", "/screen"):
             FRAME["last_req"] = time.time()
             FRAME_EVT.set()
