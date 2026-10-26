@@ -608,20 +608,66 @@ def fg_webview_sockets() -> list[str]:
     return mine or socks
 
 
+def _webview_forwards() -> list[tuple[str, int]]:
+    """现有 webview 相关 adb forward 列表：[(socket 名, 本地端口)]。
+
+    注意同一条 socket 可能有多条 forward（旧版本积落嘅），所以返 list 唔系 dict。
+    """
+    raw = adb("forward", "--list")[1] or ""
+    out = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
+    rows: list[tuple[str, int]] = []
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 3 or "webview_devtools_remote" not in parts[2]:
+            continue
+        try:
+            rows.append((parts[2].split(":", 1)[1], int(parts[1].split(":")[1])))
+        except (IndexError, ValueError):
+            continue
+    return rows
+
+
+def cleanup_webview_forwards(keep_sock: str = "", keep_port: int = 0) -> int:
+    """每个 socket 只留一条 forward（keep_sock 保留 keep_port），其余全删。"""
+    rows = _webview_forwards()
+    live = set(webview_sockets())                 # socket 冇咗（app 死咗）就连 forward 都唔留
+    keepmap: dict[str, int] = {}
+    for sock, port in rows:
+        if sock in keepmap:
+            continue
+        keepmap[sock] = keep_port if (sock == keep_sock and keep_port) else port
+    n = 0
+    for sock, port in rows:
+        if port != keepmap.get(sock) or (live and sock not in live):
+            adb("forward", "--remove", f"tcp:{port}")
+            n += 1
+    return n
+
+
 def cdp_targets() -> list[dict]:
-    """起 adb forward + 拉 /json 目标表。冇 WebView 就返空。"""
+    """起／复用 adb forward + 拉 /json 目标表。冇 WebView 就返空。
+
+    坑：socket 名带 app pid，app 一重启就变；旧版每次都新建 forward 唔删，
+    实测积到 11 条（同一 socket 都开几条）→ 现在「一个 socket 一条」+ 换 socket 就清旧。
+    """
     socks = fg_webview_sockets()
     if not socks:
+        cleanup_webview_forwards()
+        _CDP.update(port=0, sock="")
         return []
     sock = socks[0]
-    if _CDP["sock"] != sock or not _CDP["port"]:
-        port = _free_port()
+    rows = [r for r in _webview_forwards() if r[0] == sock]
+    cleanup_webview_forwards(keep_sock=sock, keep_port=rows[0][1] if rows else 0)
+    port = rows[0][1] if rows else _free_port()
+    if not rows:
         adb("forward", f"tcp:{port}", f"localabstract:{sock}")
-        _CDP.update(port=port, sock=sock)
+    _CDP.update(port=port, sock=sock, ws=None)
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{_CDP['port']}/json", timeout=5) as r:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/json", timeout=5) as r:
             return json.loads(r.read().decode() or "[]")
     except Exception:                                     # noqa: BLE001
+        adb("forward", "--remove", f"tcp:{port}")
+        _CDP.update(port=0, sock="")
         return []
 
 

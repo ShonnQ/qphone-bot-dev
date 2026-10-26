@@ -1372,6 +1372,13 @@ def main() -> int:
     srv = ThreadingHTTPServer((BIND, PORT), Handler)
     seed_frame_from_disk()                                      # 先用上一帧顶上
     threading.Thread(target=frame_worker, daemon=True).start()   # 启动即预抓，首屏唔等 adb
+    try:
+        import layers as _layers
+        _n = _layers.cleanup_webview_forwards()
+        if _n:
+            print(f"顺手清咗 {_n} 条旧 adb forward", flush=True)
+    except Exception:  # noqa: BLE001
+        pass
     print(f"qphone /turn 服务起咗：http://{BIND}:{PORT}  device={TARGET}  model={MODEL}", flush=True)
     try:
         srv.serve_forever()

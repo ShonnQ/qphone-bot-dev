@@ -596,6 +596,12 @@
   .sl-row.bad .msg{color:var(--no)}
   .sl-row.human .tag{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
   html[data-theme="dark"] .sl-row.l0 .tag{color:#FBBF24;border-color:rgba(251,191,36,.42)}
+
+  /* v1.6 云机内部：四条手 */
+  .grp.phone>.mrow.hands{gap:5px;flex-wrap:wrap}
+  .grp.phone>.mrow.hands>.n.xs{min-width:104px}
+  .grp.phone>.mrow{margin-top:0}
+  .grp.phone .n.xs.wide{min-width:260px;border-color:color-mix(in srgb, var(--ok) 30%, var(--line))}
 </style>
 <script>/* 主题要早过首帧，否则会闪一下默认亮色 */
 try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.setAttribute("data-theme","dark"); }catch(e){}</script>
@@ -684,18 +690,26 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
     <span class="link dash bi" id="l4"><span class="tag" id="adbTag">ADB ⇄ —</span></span>
 
     <div class="grp phone">
-      <span class="gtag" id="devTag">设备 · Android 13</span>
+      <span class="gtag" id="devTag">设备 · Android 13 · 四条手</span>
+      <div class="mrow hands">
+        <div class="n xs" id="n_adbd" title="adb -s localhost:5556 shell ...（am / pm / settings / input）">
+          <span class="txt"><b>adbd</b><small>ADB 通道 · L0 / L1a</small></span>
+        </div>
+        <div class="n xs" id="n_snap" title="com.callstack.agentdevice.snapshothelper v0.21.31（agent-device 装喺机内）">
+          <span class="txt"><b>snapshothelper</b><small>L1a 无障碍树</small></span>
+        </div>
+        <div class="n xs" id="n_wv" title="@webview_devtools_remote_&lt;pid&gt; + adb forward">
+          <span class="txt"><b>WebView socket</b><small>L1b CDP</small></span>
+        </div>
+        <div class="n xs" id="n_portal" title="com.mobilerun.portal · MobilerunAccessibilityService + MobilerunContentProvider">
+          <span class="txt"><b>Portal</b><small>L2 无障碍 + 手势</small></span>
+        </div>
+      </div>
       <div class="mrow">
-      <div class="n" id="n_portal"><i class="ix">05</i>
-        <svg class="ic" viewBox="0 0 24 24"><path d="M12 3v7m0 0 3-3m-3 3L9 7"/><circle cx="12" cy="16" r="4"/></svg>
-        <span class="txt"><b>Portal</b><small>落到动作</small></span>
+        <div class="n xs wide" id="n_ui">
+          <span class="txt"><b>云机 UI · 前台 App</b><small id="uiSub">被点组件</small></span>
+        </div>
       </div>
-      <span class="link" id="l5"></span>
-      <div class="n" id="n_ui"><i class="ix">06</i>
-        <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>
-        <span class="txt"><b>云机 UI</b><small id="uiSub">被点组件</small></span>
-      </div>
-      </div><!-- /mrow -->
     </div><!-- /grp phone -->
     </div><!-- /tailwrap -->
 
