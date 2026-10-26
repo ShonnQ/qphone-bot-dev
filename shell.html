@@ -571,6 +571,31 @@
   .convwrap>footer{margin-top:0;flex:0 0 auto;padding:8px 10px 7px;
     border-top:1px solid var(--line2);background:var(--panel)}
   .convwrap>footer .tele{padding-top:4px;margin-top:4px}
+
+  /* ═════ v1.5 实况窗下面：步骤日志 ═════ */
+  .steplog{margin-top:2px;flex:1 1 auto;min-height:130px;display:flex;flex-direction:column;
+    border:1px solid var(--line);border-radius:10px;background:var(--panel2);overflow:hidden}
+  .sl-hd{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px 4px;
+    border-bottom:1px solid var(--line2);font:7px/1.4 ui-monospace,Menlo,monospace;color:var(--soft);
+    letter-spacing:.6px;text-transform:uppercase}
+  .sl-hd b{font:8.5px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;color:var(--fg);letter-spacing:.2px}
+  .sl-meta{display:flex;gap:6px;font-variant-numeric:tabular-nums}
+  .sl-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:5px 7px 6px;display:flex;flex-direction:column;gap:3px}
+  .sl-body::-webkit-scrollbar{width:5px}
+  .sl-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px}
+  .sl-row{display:flex;gap:5px;align-items:flex-start;
+    font:8px/1.45 ui-monospace,Menlo,monospace}
+  .sl-row .tag{flex:0 0 auto;font-size:6.6px;line-height:1.5;padding:0 4px;border-radius:4px;
+    border:1px solid var(--line);color:var(--soft);background:var(--panel);letter-spacing:.4px}
+  .sl-row .msg{color:var(--fg);opacity:.86;word-break:break-word;white-space:pre-wrap}
+  .sl-row.l0 .tag{color:#a16207;border-color:rgba(161,98,7,.42);background:rgba(251,191,36,.10)}
+  .sl-row.l1a .tag{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 42%,transparent)}
+  .sl-row.l1b .tag{color:var(--acc2);border-color:color-mix(in srgb,var(--acc2) 42%,transparent)}
+  .sl-row.l2 .tag{color:var(--acc1);border-color:color-mix(in srgb,var(--acc1) 42%,transparent)}
+  .sl-row.ok .msg{color:var(--ok)}
+  .sl-row.bad .msg{color:var(--no)}
+  .sl-row.human .tag{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+  html[data-theme="dark"] .sl-row.l0 .tag{color:#FBBF24;border-color:rgba(251,191,36,.42)}
 </style>
 <script>/* 主题要早过首帧，否则会闪一下默认亮色 */
 try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.setAttribute("data-theme","dark"); }catch(e){}</script>
@@ -727,7 +752,10 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
     <button class="kbtn" data-key="home" type="button">主页</button>
     <button class="kbtn" data-key="appswitch" type="button">多任务</button>
   </div>
-  <div class="live-foot"><span id="liveAge">—</span><span id="liveSize">—</span></div>
+  <div class="steplog">
+    <div class="sl-hd"><b>步骤日志</b><span class="sl-meta"><span id="liveAge">—</span><span id="liveSize">—</span></span></div>
+    <div class="sl-body" id="slBody"></div>
+  </div>
 </aside>
 
 </div><!-- /layout -->
@@ -1048,6 +1076,23 @@ function taskFinish(ok, msg){
   taskCard = null;
 }
 
+// ── 步骤日志：边个组件、做咗咩动作／打出咩 ──
+let SL_THINK_STEP = -1;
+function slClear(){ const b = $("slBody"); if(b) b.innerHTML = ""; SL_THINK_STEP = -1; }
+function slAdd(tag, text, cls){
+  const b = $("slBody");
+  if(!b || text === undefined || text === null || text === "") return;
+  const row = document.createElement("div");
+  row.className = "sl-row " + (cls || "");
+  const t = document.createElement("span"); t.className = "tag"; t.textContent = tag;
+  const m = document.createElement("span"); m.className = "msg"; m.textContent = String(text).slice(0, 400);
+  const prev = b.lastElementChild;
+  if(prev && prev.firstChild.textContent === tag && prev.lastChild.textContent === m.textContent) return;
+  row.append(t, m); b.append(row);
+  while(b.children.length > 400) b.firstChild.remove();
+  b.scrollTop = b.scrollHeight;
+}
+
 // SSE 消费：/turn 同 /turn/resume 共用
 async function pump(resp, text){
   const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = "";
@@ -1067,10 +1112,16 @@ async function pump(resp, text){
           if(o.mode === "task"){ typing(false); paint({phase:"turn"}); }
         }else if(ev === "layer"){
           layerMark(o);
+          const cmds = (o.cmds || []).filter(Boolean).join("  ");
+          slAdd(o.layer || "L?", (o.skip ? "跳过 · " : "") + (o.label || "")
+                + (cmds ? "  ▸ " + cmds : "") + (o.ms ? "  · " + o.ms + " ms" : "")
+                + (o.why && !o.skip ? "  · " + o.why : ""),
+                String(o.layer || "").toLowerCase() + (o.ok ? "" : " bad"));
         }else if(ev === "resume_started"){
           typing(false); resumeCard(o.base, o.of);
         }else if(ev === "task_started"){
           typing(false); chip("<b>1 条任务</b> · 交畀 Mobilerun"); taskStart();
+          slAdd("任务", "收到：" + (text || ""), "");
         }else if(ev === "chat"){
           typing(false); paint({phase:"idle"}); say("bot", o.text || "（冇回应）");
         }else if(ev === "clarify"){
@@ -1097,7 +1148,16 @@ async function pump(resp, text){
             paint(o);
           }
           if(o.phase === "act") refreshLive(true);
+          if(LAYER_USED === "L2"){
+            if(o.action) slAdd("动作", o.action, "l2");
+            else if(o.phase === "think" && o.thought && o.step !== SL_THINK_STEP){
+              SL_THINK_STEP = o.step;
+              slAdd("思考", o.thought, "l2");
+            }
+            if(o.phase === "step") SL_THINK_STEP = -1;
+          }
         }else if(ev === "need_hand"){
+          slAdd("接手", (o.reason || "要人处理") + " · 已用 " + (o.used ?? "?") + "/" + (o.of ?? "?") + " 步", "human");
           needHand(o);
         }else if(ev === "needs_human"){
           typing(false);
@@ -1114,8 +1174,19 @@ async function pump(resp, text){
           const used = LAYER_USED;
           taskFinish(!!o.success, o.message);
           layerStats(o.layer_stats, o.layer_total, used);
+          slAdd(o.success ? "完成" : "失败", o.message || "", o.success ? "ok" : "bad");
+        }else if(ev === "progress"){
+          const ln = String(o.line || "").replace(/^[\s·]+/, "");
+          const mStep = ln.match(/^🔄\s*Step (\d+)\/(\d+)/);
+          if(mStep){ slAdd("步", mStep[1] + " / " + mStep[2], "l2"); return; }
+          const noise = !ln
+            || /^(L0|L1a|L1b|L2)\s*·/.test(ln) || /^执行层未接得住/.test(ln)
+            || /^(✨|🚀|🤖|👁|📁|🔧|⚙|🎯|📦)/.test(ln)
+            || /^(<|FastAgent response|Malformed|Traceback|Attempt |Tool results)/.test(ln);
+          if(!noise) slAdd("LOG", ln, "");
+        }else if(ev === "trajectory"){
+          slAdd("轨迹", "截图序列已存：" + (o.id || ""), "");
         }
-        /* status / trajectory / progress：过程图已表达，唔再刷屏 */
       }
     }
 }
@@ -1160,7 +1231,7 @@ async function submit(forceMode, echoText){
   say("me", text);
   typing(true);
   const mode = forceMode || "auto";
-  layerReset();
+  layerReset(); slClear();
   try{
     const resp = await fetch("/turn", {method:"POST", headers:{"Content-Type":"application/json"},
                                       body: JSON.stringify({text, mode})});
@@ -1183,6 +1254,7 @@ $("chClear").addEventListener("click", async () => {
     await fetch("/history/clear", {method:"POST"});
     chatEl.innerHTML = ""; lastSide = null; taskCard = null; lastTaskCardEl = null; typingWrap = null;
     const ls = $("lstat"); if(ls) ls.textContent = "";
+    slClear();
     chip("会话已清空"); paint({phase:"idle"});
   }catch(e){ chip("清空失败：" + e); }
 });

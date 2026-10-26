@@ -687,8 +687,10 @@ def l1b_try(text: str) -> dict | None:
         r = cdp_eval(CLICK_JS % json.dumps(target.lower(), ensure_ascii=False))
         val = r.get("value") or {}
         ok = bool(r.get("ok") and isinstance(val, dict) and val.get("ok"))
-        why = (f"{val.get('tag')} {val.get('text','')}".strip()
-               or val.get("reason") or r.get("error") or "页面搵唔到呢个文字")
+        bits = [str(val.get("tag") or ""), str(val.get("text") or "")] if isinstance(val, dict) else []
+        why = (" ".join(x for x in bits if x).strip()
+               or (val.get("reason") if isinstance(val, dict) else None)
+               or r.get("error") or "页面搵唔到呢个文字")
         return trace("L1b", f"网页点「{target}」", ["CDP Runtime.evaluate click"], t0, ok, why[:80])
     m = re.search(r"(?:输入|填写|打)\s*[「『\"“']?([^」』\"”']{1,60})[」』\"”']?\s*(?:落|入|去|到)", t)
     if m:

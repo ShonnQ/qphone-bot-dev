@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.25</title>
+<title>QPhone 详细设计说明书 v0.26</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -51,10 +51,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.25</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.26</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.25</p>
+<p>版本：v0.26</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -209,6 +209,12 @@ strong{font-weight:700}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.26</td>
+<td>实况窗下方新增<strong>步骤日志</strong>（<code>#slBody</code>）：按组件分行记录「任务 / L0 / L1a / L1b / L2 / 步 / 思考 / 动作 / 完成 / 失败 / 接手 / 轨迹」，标签分色；过滤 Mobilerun banner 与工具调用 XML 噪音，连续重复行去重。</td>
+<td>C</td>
+<td><span class="nowrap">2026-10-26</span></td>
+</tr>
 <tr>
 <td>v0.25</td>
 <td>版面：流程图/状态区同会话区用独立面板隔离；聊天列表 + 输入框 + 底部遥测合成一个「会话窗」（<code>.convwrap</code>），聊天区内部滚动、输入框固定在面板底部。</td>
@@ -1372,6 +1378,51 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tbody>
 </table>
 <p>坑：<code>step</code> 事件由 Mobilerun 自己数，续跑会由 1 重新数，所以壳要 <code>STEP_BASE</code> 加返前面用咗嘅步数。</p>
+<h4>3.4.16 步骤日志（实况窗下方）</h4>
+<p>「边个组件、做咗咩、打出咩」一屏睇完，唔靠猜。</p>
+<table>
+<thead>
+<tr>
+<th>标签</th>
+<th>来源</th>
+<th>例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>任务</td>
+<td><code>task_started</code></td>
+<td>收到：打开设置</td>
+</tr>
+<tr>
+<td>L0 / L1a / L1b / L2</td>
+<td><code>layer</code></td>
+<td><code>L1a: 点「网络和互联网」  ▸ agent-device snapshot  input tap  · 1716 ms</code></td>
+</tr>
+<tr>
+<td>步</td>
+<td><code>progress</code> 的 <code>🔄 Step N/M</code></td>
+<td>3 / 20</td>
+</tr>
+<tr>
+<td>思考 / 动作</td>
+<td><code>activity</code>（<code>think</code> / <code>act</code>，只 L2）</td>
+<td>模型本步谂乜、Portal 做乜</td>
+</tr>
+<tr>
+<td>LOG</td>
+<td><code>progress</code> 其余行</td>
+<td>Mobilerun 原文（已滤 banner）</td>
+</tr>
+<tr>
+<td>完成 / 失败 / 接手 / 轨迹</td>
+<td><code>result</code> / <code>need_hand</code> / <code>trajectory</code></td>
+<td>结果、要人接手、截图序列已存</td>
+</tr>
+</tbody>
+</table>
+<p>去噪规则（唔滤就会洗版）：<code>✨🚀🤖👁📁🔧⚙🎯📦</code> 开头嘅 banner、<code>&lt;...&gt;</code> / <code>FastAgent response</code> / <code>Malformed tool-call</code> / <code>Traceback</code> / <code>Attempt N</code> 一律唔入；<code>L0 · …</code> 摘要行已由 layer 行表达，唔重复；连续相同 tag+内容去重；<code>思考</code> 每步只写一次（Mobilerun 会边谂边加长同一段）。</p>
+<p>右栏结构：<code>云机实况</code> → <code>返回/主页/多任务</code> → <code>步骤日志</code>（占满剩余高度、内部滚动；标题右侧保留时间 / 分辨率 / fps）。</p>
 <h2>4. 用户界面详细设计</h2>
 <h3>4.1 界面结构</h3>
 <p>主界面是壳里的对话。本文不重画这个界面。</p>
