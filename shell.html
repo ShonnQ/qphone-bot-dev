@@ -567,10 +567,10 @@
     </div>
 
     <div class="tailwrap">
-    <span class="link dash bi" id="l4"><span class="tag">ADB ⇄ tcp 10532</span></span>
+    <span class="link dash bi" id="l4"><span class="tag" id="adbTag">ADB ⇄ —</span></span>
 
     <div class="grp phone">
-      <span class="gtag">云机 · Android 13</span>
+      <span class="gtag" id="devTag">设备 · Android 13</span>
       <div class="mrow">
       <div class="n" id="n_portal"><i class="ix">05</i>
         <svg class="ic" viewBox="0 0 24 24"><path d="M12 3v7m0 0 3-3m-3 3L9 7"/><circle cx="12" cy="16" r="4"/></svg>
@@ -711,8 +711,12 @@ async function refreshStatus(){
     dot.className = s.booted ? "on" : "off";
     meta.textContent = s.booted ? (s.target || "已连云机") : ("云机离线" + (s.target ? " · " + s.target : ""));
     meta.title = s.note || "";
-    const hp = $("hopPort");
-    if(hp && s.target) hp.textContent = "tcp " + s.target.split(":")[1];
+    const tgt = s.target || "";
+    const local = /^emulator-/.test(tgt), lan = /:\d+$/.test(tgt);
+    const at = $("adbTag");
+    if(at) at.textContent = "ADB ⇄ " + (local ? "本地模拟器" : (lan ? "tcp " + tgt.split(":")[1] : (tgt || "—")));
+    const dt = $("devTag");
+    if(dt) dt.textContent = (local ? "本地模拟器" : "云机") + " · Android " + (s.sdk === "33" ? "13" : (s.sdk || "?"));
   }catch(e){ dot.className="off"; meta.textContent="服务未跑"; }
 }
 refreshStatus(); setInterval(refreshStatus, 8000);

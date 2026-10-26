@@ -78,7 +78,20 @@ def adb(*args: str, timeout: int = 60) -> str:
     return out
 
 
+def listed_devices() -> list[str]:
+    cp = run([adb_path(), "devices"], timeout=20)
+    out = []
+    for line in (cp.stdout or "").splitlines()[1:]:
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] == "device":
+            out.append(parts[0])
+    return out
+
+
 def connect() -> None:
+    # 本地模拟器（emulator-5554）本来就已经挂喺 adb devices，唔使 adb connect
+    if TARGET.startswith("emulator-") or TARGET in listed_devices():
+        return
     cp = run([adb_path(), "connect", TARGET], timeout=20)
     text = f"{cp.stdout}\n{cp.stderr}".lower()
     if "unable to connect" in text or "failed" in text or "refused" in text:
