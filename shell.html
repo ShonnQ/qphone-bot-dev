@@ -559,6 +559,18 @@
     cursor:pointer;background:linear-gradient(140deg,#ef4444,#b91c1c);box-shadow:0 4px 12px -6px #dc2626;padding:0}
   #send svg{width:11px;height:11px;stroke:#fff5f5;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
   #send:disabled{opacity:.45;cursor:default;box-shadow:none}
+
+  /* ═════ v1.4 会话窗：流程图同会话隔离，聊天 + 输入框合成一块 ═════ */
+  body>.layout{flex:1 1 auto;min-height:0}
+  .board{min-height:0}
+  .convwrap{margin-top:14px;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    background:var(--panel2);display:flex;flex-direction:column;flex:1 1 auto;min-height:220px;
+    box-shadow:0 14px 34px -28px rgba(0,0,0,.55)}
+  .convwrap>.chatwrap{margin-top:0;border-top:0;padding:0 10px;min-height:0;flex:1 1 0}
+  .convwrap>.chatwrap>.chat{padding:2px 2px 6px}
+  .convwrap>footer{margin-top:0;flex:0 0 auto;padding:8px 10px 7px;
+    border-top:1px solid var(--line2);background:var(--panel)}
+  .convwrap>footer .tele{padding-top:4px;margin-top:4px}
 </style>
 <script>/* 主题要早过首帧，否则会闪一下默认亮色 */
 try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.setAttribute("data-theme","dark"); }catch(e){}</script>
@@ -678,6 +690,7 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
   <div class="lstat" id="lstat"></div>
   <div class="detail" id="detail"></div>
 
+  <section class="convwrap">
   <section class="chatwrap">
     <div class="chat-hd">
       <i class="ch-dot" id="chDot"></i>
@@ -687,6 +700,18 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
     <div class="chat" id="chat"></div>
     <span class="jump" id="jump">↓ 跳到最新</span>
   </section>
+  <footer>
+    <div class="crow">
+      <button id="plus" title="附加（未接）">+</button>
+      <textarea id="input" rows="1" placeholder="给 云机 发消息"></textarea>
+      <button id="mic" title="语音（未接）">🎙</button>
+      <button id="send" aria-label="发送"><svg viewBox="0 0 24 24"><path d="M4 12h13M12 6l6 6-6 6"/></svg></button>
+    </div>
+    <div class="tele" id="tele">
+      <span>qph-0.8</span><span>mac :8777</span><span id="teleAdb">adb :—</span><span id="teleModel">grok-4.7</span>
+    </div>
+  </footer>
+  </section><!-- /convwrap -->
 
   </div><!-- /board -->
 
@@ -708,17 +733,6 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
 </div><!-- /layout -->
 
 
-<footer>
-  <div class="crow">
-    <button id="plus" title="附加（未接）">+</button>
-    <textarea id="input" rows="1" placeholder="给 云机 发消息"></textarea>
-    <button id="mic" title="语音（未接）">🎙</button>
-    <button id="send" aria-label="发送"><svg viewBox="0 0 24 24"><path d="M4 12h13M12 6l6 6-6 6"/></svg></button>
-  </div>
-  <div class="tele" id="tele">
-    <span>qph-0.8</span><span>mac :8777</span><span id="teleAdb">adb :—</span><span id="teleModel">grok-4.7</span>
-  </div>
-</footer>
 
 <script>
 const $ = id => document.getElementById(id);
