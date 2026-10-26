@@ -56,6 +56,10 @@ strong{font-weight:700}
   display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 0}
 .meta span{background:var(--code);border:1px solid var(--line2);border-radius:999px;padding:4px 9px}
 .nowrap{white-space:nowrap}
+/* 架构总览：深色图卡，图内自带配色，唔跟亮色主题 */
+.archfig{background:#0b1220;border:1px solid rgba(15,23,42,.16);border-radius:16px;
+  padding:14px 12px;overflow-x:auto;margin:14px 0 18px}
+.archfig svg{display:block;max-width:100%;height:auto;margin:0 auto}
 """
 
 
