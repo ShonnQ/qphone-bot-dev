@@ -481,7 +481,9 @@
 
   .b{max-width:74%;font-size:10.12px;line-height:1.6;padding:7px 10px;border-radius:14px;white-space:pre-wrap;
     word-break:break-word;position:relative}
-  .b.me{align-self:flex-end;background:rgba(125,211,252,.17);color:#eaf6ff}
+  .b.me{align-self:flex-end;background:rgba(3,105,161,.10);color:var(--fg);
+         border:1px solid rgba(3,105,161,.22)}
+  html[data-theme="dark"] .b.me{background:rgba(125,211,252,.17);color:#eaf6ff;border-color:transparent}
   .b.bot{align-self:flex-start;background:var(--panel2);border:1px solid var(--line);color:var(--fg)}
   .b.fold{max-height:80px;overflow:hidden}
   .b.fold:after{content:"";position:absolute;left:0;right:0;bottom:0;height:18px;
@@ -696,7 +698,7 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
 <script>
 const $ = id => document.getElementById(id);
 const input=$("input"), send=$("send"), meta=$("meta"), dot=$("dot");
-let STEP_OF = 20;
+let STEP_OF = 20, STEP_NOW = 0;
 const nowEl=$("now"), stepEl=$("stepno"), detailEl=$("detail"), progEl=$("prog"), pctEl=$("pct");
 
 const CHAIN = ["you","shell","turn","mob","portal","ui"];
@@ -920,10 +922,16 @@ function typing(on){
 }
 function taskStart(){
   const card = document.createElement("div"); card.className = "task";
+  STEP_OF = 0; STEP_NOW = 0;                       // 每单清零，唔累计上一单步数
+  $("now") && ($("now").textContent = "交畀 /turn");
+  if(typeof stepEl !== "undefined" && stepEl){ stepEl.textContent = ""; }
+  if(typeof progEl !== "undefined" && progEl){ progEl.style.width = "0%"; }
+  if(typeof pctEl !== "undefined" && pctEl){ pctEl.textContent = ""; }
+  const sc0 = $("stepChip"); if(sc0) sc0.classList.remove("on");
   card.innerHTML = '<div class="t-hd">'
     + '<svg viewBox="0 0 24 24" style="width:9px;height:9px;stroke:#FBBF24;fill:none;stroke-width:2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
-    + '<span class="t-txt">执行中</span><span class="t-step">STEP 00 / ' + (STEP_OF || 20) + '</span></div>'
-    + '<div class="t-bar"><i></i></div><div class="t-dt">已交畀 Mobilerun，等第一步</div>';
+    + '<span class="t-txt">执行中</span><span class="t-step">STEP 00 / —</span></div>'
+    + '<div class="t-bar"><i></i></div><div class="t-dt">已交畀路由，等判定走边层</div>';
   chatEl.append(card); lastSide = "task"; taskCard = card; lastTaskCardEl = card; scrollDown(true);
   return card;
 }

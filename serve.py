@@ -301,7 +301,7 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
     """跑 Mobilerun，把输出翻译成壳认嘅事件。"""
     started = time.time()
     route = llm_route()
-    _pub(q, "turn")
+    _pub(q, "turn", step=0, of=0, thought="", action="")   # 每单清零，唔累计上一单步数
 
     # ── 先试确定性三层（L0 → L1a → L1b）；全唔中才落 L2 视觉 ──
     try:
@@ -309,18 +309,25 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
     except Exception as e:  # noqa: BLE001
         tr = None
         q.put(("progress", {"line": f"L0–L1b 路由异常：{e}"}))
-    if tr and tr.get("ok"):
+    if tr and (tr.get("ok") or tr.get("final")):
+        ok = bool(tr.get("ok"))
         detail = f"{tr['layer']} · {tr['label']} · {tr['ms']} ms" + (f" · {tr['why']}" if tr.get("why") else "")
         q.put(("progress", {"line": detail}))
         _pub(q, "step", step=1, of=1, action=f"{tr['layer']} {tr['label']}")
-        LAST_RESULT.update(ok=True, msg=detail, ts=time.time())
-        hist_task_update(CURRENT_TASK["id"], phase="done", msg=detail[:300])
-        _pub(q, "done", action="")
-        q.put(("result", {"success": True, "message": f"{tr['label']}（{tr['layer']}，{tr['ms']} ms）"}))
+        LAST_RESULT.update(ok=ok, msg=detail, ts=time.time())
+        hist_task_update(CURRENT_TASK["id"], phase="done" if ok else "human", msg=detail[:300])
+        _pub(q, "done" if ok else "human", action="")
+        q.put(("result", {"success": ok,
+                          "message": f"{tr['label']}（{tr['layer']}，{tr['ms']} ms）" if ok else detail}))
         q.put(("_end", {}))          # L0/L1 已直接落到目标态，唔按 home 复位
         return
+    # 落 L2 之前讲清每层点解唔接（老板要知点解成日 L2）
+    why = "；".join(f"{a['layer']} {a.get('why') or '未命中'}"
+                    for a in (getattr(layers, "LAST_ATTEMPTS", None) or []) if not a.get("ok")) \
+          or "L0/L1a/L1b 未命中"
+    q.put(("progress", {"line": "执行层未接得住，转 L2 视觉：" + why}))
     q.put(("layer", {"layer": "L2", "label": "转视觉（Mobilerun）", "cmds": ["mobilerun run"],
-                     "ms": 0, "ok": True, "why": "L0/L1a/L1b 未命中"}))
+                     "ms": 0, "ok": True, "why": why}))
     try:
         cmd = [
             mobilerun_bin(), "run", text,

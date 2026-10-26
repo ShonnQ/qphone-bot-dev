@@ -85,6 +85,35 @@ APP_ALIASES = {
     "qphone": "com.mobilerun.portal", "助手": "com.mobilerun.portal",
 }
 
+# 常见第三方 app（包名固定，查有无装好准；唔喺表、又唔喺机上一律当「唔识」）
+APP_EXTRA = {
+    "印象笔记": "com.evernote", "evernote": "com.evernote",
+    "微信": "com.tencent.mm", "wechat": "com.tencent.mm",
+    "企业微信": "com.tencent.wework", "qq": "com.tencent.mobileqq",
+    "支付宝": "com.eg.android.AlipayGphone", "淘宝": "com.taobao.taobao",
+    "闲鱼": "com.taobao.idlefish", "抖音": "com.ss.android.ugc.aweme",
+    "快手": "com.smile.gifmaker", "小红书": "com.xingin.xhs",
+    "微博": "com.sina.weibo", "哔哩哔哩": "tv.danmaku.bili", "b站": "tv.danmaku.bili",
+    "网易云音乐": "com.netease.cloudmusic", "qq音乐": "com.tencent.qqmusic",
+    "高德地图": "com.autonavi.minimap", "百度地图": "com.baidu.BaiduMap",
+    "钉钉": "com.alibaba.android.rimet", "飞书": "com.ss.android.lark",
+    "chrome": "com.android.chrome", "迅雷": "com.xunlei.downloadprovider",
+}
+APP_ALIASES.update(APP_EXTRA)
+
+_INSTALLED = {"at": 0.0, "pkgs": set()}
+
+
+def installed(force: bool = False) -> set:
+    """已装包名集合（缓存 60 s）。"""
+    if not force and _INSTALLED["pkgs"] and time.time() - _INSTALLED["at"] < 60:
+        return _INSTALLED["pkgs"]
+    out = sh("pm list packages")
+    pk = {l.split(":", 1)[-1].strip() for l in out.splitlines() if ":" in l}
+    _INSTALLED.update(at=time.time(), pkgs=pk)
+    return pk
+
+
 NOISE = ("帮我", "同我", "麻烦你", "请", "唔该", "我想", "我要", "即刻", "一下", "下", "啦", "吖", "呀", "吓")
 
 
@@ -100,9 +129,9 @@ def resolve_package(word: str) -> str:
     w = word.strip().lower().replace(" ", "")
     if not w:
         return ""
-    for k, v in APP_ALIASES.items():
-        if k in w:
-            return v
+    for k in sorted(APP_ALIASES, key=len, reverse=True):
+        if w == k or (w.startswith(k) and len(w) - len(k) <= 2):
+            return APP_ALIASES[k]
     pkgs = [l.split(":", 1)[-1].strip() for l in sh("pm list packages -3").splitlines()]
     pkgs += [l.split(":", 1)[-1].strip() for l in sh("pm list packages").splitlines()]
     for p in pkgs:
@@ -166,11 +195,28 @@ def l0_try(text: str) -> dict | None:
     t = clean(raw)
     t0 = time.time()
 
+    # 1b) 查有冇装某 app（L0 直接查包表，唔使开设置翻页）
+    m = re.search(r"(?:有无|有冇|有没有|是否)(?:装|安装|安装咗)?\s*([^\s，。？！]{1,12})", t, re.I)
+    if m:
+        name = re.sub(r"(app|应用|应用程式|程式)$", "", m.group(1).strip(), flags=re.I)
+        pkg = resolve_package(name)
+        if pkg and pkg in installed():
+            return trace("L0", f"查有冇装 {name}", [f"pm list packages {pkg}"], t0, True, f"有装：{pkg}")
+        if pkg:
+            return trace("L0", f"查有冇装 {name}", [f"pm list packages {pkg}"], t0, True, f"冇装：{pkg}")
+        hit = [p for p in installed() if name.lower() and name.lower() in p.lower()]
+        if hit:
+            return trace("L0", f"查有冇装 {name}", ["pm list packages"], t0, True, f"有装：{hit[0]}")
+
     # 1) 打开 app
-    m = re.match(r"^(?:打开|开|启动|开启|进入|run|open)\s*(.+?)(?:app|应用|应用程式)?$", t, re.I)
+    m = re.match(r"^(?:打开|开|启动|开启|进入|去|用|睇|看|run|open|launch)\s*(?:个|一?下)?\s*(.+?)(?:app|应用|应用程式)?$", t, re.I)
     if m:
         name = m.group(1).strip()
         pkg = resolve_package(name)
+        if pkg and pkg not in installed():
+            tr = trace("L0", f"打开 {name}", [f"pm list packages {pkg}"], t0, False, f"未安装 {pkg}")
+            tr["final"] = True          # 确定结论：唔需要再试 L1/L2
+            return tr
         if pkg:
             ok, why, cmd = open_app(pkg)
             return trace("L0", f"打开 {name}", [cmd], t0, ok, why or pkg)
@@ -330,6 +376,8 @@ I18N = {
     "文件": ("files",), "日历": ("calendar",), "计算器": ("calculator",), "短信": ("messages", "sms"),
     "浏览器": ("browser",), "网页": ("browser", "webview"), "设置页": ("settings",),
     "列表": ("list",), "更多": ("more",), "菜单": ("menu",), "刷新": ("refresh", "reload"),
+    "闹钟": ("alarm", "clock"), "时钟": ("clock",), "闹钟音量": ("alarm volume",),
+    "免打扰": ("do not disturb",), "应用宝": ("app store", "appstore", "应用宝"),
     "分享": ("share",), "编辑": ("edit",), "删除": ("delete",), "新增": ("add", "new"),
 }
 
@@ -386,7 +434,7 @@ def node_center(n: dict) -> tuple[int, int] | None:
 
 
 # 「点『设置』」「按确定」「点击 相机」之类：带引号或动词 + 短名词
-L1A_VERBS = r"(?:点击|点开|点|按下|按|选择|选|打开|进入|tap|click)"
+L1A_VERBS = r"(?:点击|点开|点|按下|按|选择|选|打开|进入|查找|找|搜|搜索|查看|睇|看|填|输入|tap|click)"
 
 
 def l1a_try(text: str) -> dict | None:
@@ -602,6 +650,9 @@ def l1b_try(text: str) -> dict | None:
 
 
 # ─────────────────────────────── 路由器：L0 → L1a → L1b（→ 交 L2）
+LAST_ATTEMPTS: list[dict] = []
+
+
 def route(text: str, emit=None) -> dict | None:
     """逐层试；成功就返该层 trace，全部唔得返 None（调用方转 L2）。"""
     def fire(tr: dict) -> None:
@@ -614,6 +665,7 @@ def route(text: str, emit=None) -> dict | None:
                 pass
 
     chain = [("L0", l0_try), ("L1a", l1a_try), ("L1b", l1b_try)]
+    LAST_ATTEMPTS.clear()
     last = None
     for name, fn in chain:
         t0 = time.time()
@@ -623,6 +675,10 @@ def route(text: str, emit=None) -> dict | None:
             tr = {"layer": name, "label": "异常", "cmds": [], "ms": now_ms() - int(t0 * 1000),
                   "ok": False, "why": str(e)[:120]}
         if tr is None:
+            LAST_ATTEMPTS.append({"layer": name, "ok": False,
+                                  "why": {"L0": "能力表冇呢句",
+                                          "L1a": "冇「动作+目标」可对号入座",
+                                          "L1b": "冇 WebView 调试 socket / 页面冇呢个文字"}.get(name, "未命中")})
             if emit:
                 try:
                     emit("layer", {"layer": name, "label": "未命中", "cmds": [], "ms": 0,
@@ -631,7 +687,8 @@ def route(text: str, emit=None) -> dict | None:
                     pass
             continue
         fire(tr)
-        if tr.get("ok"):
+        LAST_ATTEMPTS.append({"layer": name, "ok": bool(tr.get("ok")), "why": tr.get("why", "")})
+        if tr.get("ok") or tr.get("final"):
             return tr
         last = tr
     return last if last and last.get("ok") else None
