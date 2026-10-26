@@ -298,6 +298,10 @@
            letter-spacing:.9px;color:var(--soft);text-transform:uppercase}
   .lp-head b{color:var(--fg);font-weight:600;letter-spacing:.6px}
   .lp-head span{margin-left:auto;font-size:6.38px;letter-spacing:.3.0px;text-transform:none}
+  .lpzoom{flex:0 0 auto;width:14px;height:14px;display:grid;place-items:center;padding:0;cursor:pointer;
+          font:9px/1 ui-monospace,Menlo,monospace;color:var(--soft);
+          background:var(--inset);border:1px solid var(--line);border-radius:4px}
+  .lpzoom:hover{color:var(--fg);border-color:var(--arrow2)}
   .live-head{display:flex;align-items:center;gap:4.5px;font:7.12px/1.5 ui-monospace,Menlo,monospace;
              letter-spacing:.9px;color:var(--soft);text-transform:uppercase}
   .ldot{width:5px;height:5px;border-radius:50%;background:var(--no)}
@@ -646,7 +650,7 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
   </div><!-- /board -->
 
 <aside class="livepanel">
-  <div class="lp-head"><i class="ldot" id="ldot"></i><b>云机实况</b><span id="liveRes">—</span></div>
+  <div class="lp-head"><i class="ldot" id="ldot"></i><b>云机实况</b><span id="liveRes">—</span><button class="lpzoom" id="lbOpen" type="button" title="放大画面（画面本身系触摸区）">⤢</button></div>
   <div class="phone" id="liveBox" title="点一下＝点云机，拖动＝滑动">
     <img id="liveImg" alt="云机画面">
     <div class="off" id="liveOff"><b>云机离线</b><small id="liveOffSub">画面系旧帧</small></div>
@@ -1171,7 +1175,7 @@ function openLb(){
   lb.classList.add("show");
 }
 function closeLb(){ lb.classList.remove("show"); }
-document.querySelector(".livepanel .phone").addEventListener("click", openLb);
+$("lbOpen").addEventListener("click", openLb);   // 画面本身系触摸区，唔可以再绑 click 放大
 $("lbX").addEventListener("click", closeLb);
 lb.addEventListener("click", e => { if(e.target === lb) closeLb(); });
 document.addEventListener("keydown", e => { if(e.key === "Escape") closeLb(); });
