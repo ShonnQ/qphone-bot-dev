@@ -73,7 +73,18 @@ STATE = {"phase": "idle", "step": 0, "of": 0, "thought": "", "action": "",
          "component": "", "ts": 0.0}
 _ACT = {"in_think": False, "buf": []}
 _ACT_LOCK = threading.Lock()
-LAST_RESULT = {"ok": None, "msg": "", "ts": 0.0}   # 对话模式要知上一单做到未
+LAST_RESULT = {"ok": None, "msg": "", "ts": 0.0}
+
+# 执行层用量（每单用咗边层就 +1，会话级累计），result 事件带埋畀壳画占比
+LAYER_STATS = {"L0": 0, "L1a": 0, "L1b": 0, "L2": 0}
+_LAYER_LOCK = threading.Lock()
+
+
+def layer_bump(k: str):
+    with _LAYER_LOCK:
+        if k in LAYER_STATS:
+            LAYER_STATS[k] += 1
+        return dict(LAYER_STATS), sum(LAYER_STATS.values())   # 对话模式要知上一单做到未
 
 # ---- 会话历史（刷新 / 断线都唔会消失）----
 HISTORY: list[dict] = []
@@ -317,8 +328,10 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
         LAST_RESULT.update(ok=ok, msg=detail, ts=time.time())
         hist_task_update(CURRENT_TASK["id"], phase="done" if ok else "human", msg=detail[:300])
         _pub(q, "done" if ok else "human", action="")
+        st, tot = layer_bump(tr["layer"])
         q.put(("result", {"success": ok,
-                          "message": f"{tr['label']}（{tr['layer']}，{tr['ms']} ms）" if ok else detail}))
+                          "message": f"{tr['label']}（{tr['layer']}，{tr['ms']} ms）" if ok else detail,
+                          "layer_stats": st, "layer_total": tot}))
         q.put(("_end", {}))          # L0/L1 已直接落到目标态，唔按 home 复位
         return
     # 落 L2 之前讲清每层点解唔接（老板要知点解成日 L2）
@@ -328,6 +341,7 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
     q.put(("progress", {"line": "执行层未接得住，转 L2 视觉：" + why}))
     q.put(("layer", {"layer": "L2", "label": "转视觉（Mobilerun）", "cmds": ["mobilerun run"],
                      "ms": 0, "ok": True, "why": why}))
+    lstats, ltot = layer_bump("L2")
     try:
         cmd = [
             mobilerun_bin(), "run", text,
@@ -402,16 +416,19 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
                          msg=(message or "")[:300])
         if success:
             _pub(q, "done", action="")
-            q.put(("result", {"success": True, "message": message or "做完"}))
+            q.put(("result", {"success": True, "message": message or "做完",
+                              "layer_stats": lstats, "layer_total": ltot}))
         else:
             _pub(q, "human", action="")
             q.put(("needs_human", {"reason": message or "agent 未做到，需要人睇屏"}))
-            q.put(("result", {"success": False, "message": message or "未做到"}))
+            q.put(("result", {"success": False, "message": message or "未做到",
+                              "layer_stats": lstats, "layer_total": ltot}))
         if HOME_AFTER:
             press_home()                     # 收尾：任务完就返桌面，唔留低上个 app
     except Exception as e:  # noqa: BLE001
         q.put(("needs_human", {"reason": f"控制程序出错：{e}"}))
-        q.put(("result", {"success": False, "message": str(e)}))
+        q.put(("result", {"success": False, "message": str(e),
+                          "layer_stats": dict(LAYER_STATS), "layer_total": sum(LAYER_STATS.values())}))
     finally:
         q.put(("_end", {}))
 

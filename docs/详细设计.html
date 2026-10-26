@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.20</title>
+<title>QPhone 详细设计说明书 v0.21</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -51,10 +51,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.20</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.21</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.20</p>
+<p>版本：v0.21</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -209,6 +209,12 @@ strong{font-weight:700}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.21</td>
+<td>执行层命中有强调动画（复用 <code>amberblink</code>：内嵌 2px 实黄、1.1 s、2 次，一单每层只闪一次）；结果卡下方新增「执行层占比」（会话级累计，按单计，最大余数法取整到 100%）；修亮色主题下完成卡结果行与步数行字色对比不足。</td>
+<td>C</td>
+<td><span class="nowrap">2026-10-26</span></td>
+</tr>
 <tr>
 <td>v0.20</td>
 <td>并入架构文档：顶部新增「架构总览 · 执行分层」一节（执行分层图 + 三类边界说明），<code>架构图.html</code> 删除，架构图只此一份。</td>
@@ -1297,6 +1303,14 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <li><strong>包名别名写错</strong>：印象笔记国行包名系 <code>com.yinxiang</code>（唔系 <code>com.evernote</code>），应用宝系 <code>com.tencent.android.qqdownloader</code>。别名错会令「有无装 X」误答「未安装」——所以搵唔到别名时改为列出机上第三方 app，唔好一口咬定冇装。</li>
 </ol>
 <p>另加「去<app>做X」前缀：先开 App，再把剩余意图跑第二轮（例如「去应用宝下载快手」= 开应用宝 + 再判「下载快手」）。</p>
+<h4>3.4.14 命中强调与用量统计</h4>
+<p><strong>命中强调</strong>：某层判定成功时，该组件闪内嵌 2px 实黄（复用 <code>amberblink</code> 参数：<code>rgba(251,191,36,.45) → 1 → .45</code>，1.1 s，2 次），闪完停喺绿框（<code>.ok</code>）+ 毫秒数。</p>
+<p>坑：<code>paint()</code> 每次重画会清掉节点 className，靠 class 挂动画会被抹。故用 Web Animations API（<code>nd.animate([...])</code>）挂喺元素上，另加 <code>PULSED</code> 表保证<strong>一单每层只闪一次</strong>（<code>layerReset()</code> 清表），实测脉冲 0.6 s 起、2.07 s 止，正好 2×1100 ms。</p>
+<p><strong>用量统计</strong>：服务端 <code>LAYER_STATS = {L0,L1a,L1b,L2}</code> 会话级累计，每单短路到一层就 +1（L2 兜底亦计），<code>result</code> 事件带 <code>layer_stats</code> + <code>layer_total</code>。</p>
+<p>壳喺结果卡下方画一行占比：每层一根 44×4 px 细条 + <code>百分比 · 单数</code>，本单命中那层条用 <code>--ok</code>，零值降到 42% 透明。</p>
+<blockquote>
+<p>口径：<strong>按单计</strong>，唔系按调用次数——一单只会落到一层（短路降级），所以四层百分比加起来 100%（用最大余数法取整，唔会出现 63%+38%=101%）。</p>
+</blockquote>
 <h2>4. 用户界面详细设计</h2>
 <h3>4.1 界面结构</h3>
 <p>主界面是壳里的对话。本文不重画这个界面。</p>
@@ -1304,7 +1318,8 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <h3>4.2 处理流程与约束</h3>
 <p>人在对话里输入。看到要人之后，到云机一侧看那部机器，不要求把画面转到当前电脑。</p>
 <p>约束：壳不写死平台，也不写死云机来源。换云机（容器 ↔ 租用实例）只改控制程序，壳一行不动。</p>
-<p>模型地址由人在控制程序一侧填写。本文不代填。</p>
+<p>模型地址由人在控制程序一侧填写。本文不代填。<br>
+<strong>结果卡（<code>.task</code>）配色约束</strong>：结果行 <code>.t-dt</code> 用 <code>var(--fg)</code>（亮色实测对比 16.5:1），步数行 <code>.t-step</code> 用 <code>var(--soft)</code>（6.3:1）；暗色用 <code>html[data-theme="dark"]</code> 单独保留原浅色值。⚠️ 唔可以再写死 <code>#cfd8e3</code> / <code>#e9d9a8</code> 一类暗色专用色——亮色主题下会变「睇唔到字」。</p>
 <h2>附录 A 词汇表</h2>
 <table>
 <thead>
