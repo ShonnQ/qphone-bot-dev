@@ -669,10 +669,7 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
 
   <section class="chatwrap">
     <div class="chat-hd">
-      <span class="ch-av"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>
-      <div class="ch-id"><b>云机 · QPhone</b><small id="chatSub">ANDROID 13 · —</small></div>
       <i class="ch-dot" id="chDot"></i>
-      <button class="ch-clear" id="chHome" title="叫云机返桌面">返桌面</button>
       <button class="ch-clear" id="chClear" title="清空会话">清空</button>
       <span class="ch-more">⋯</span>
     </div>
@@ -867,8 +864,6 @@ async function refreshStatus(){
     // 底部遥测同会话头嘅端口一律跟 target 变，唔准写死（旧版写 10532）
     const port = lan ? tgt.split(":")[1] : (local ? "模拟器" : "—");
     const ta = $("teleAdb"); if(ta) ta.textContent = "adb :" + port;
-    const cs = $("chatSub");
-    if(cs) cs.textContent = "ANDROID " + (s.sdk === "33" ? "13" : (s.sdk || "?")) + " · " + port;
   }catch(e){ dot.className="off"; meta.textContent="服务未跑"; }
 }
 // ── 明暗开关（只换 token，不动版式）──
@@ -1102,13 +1097,6 @@ send.addEventListener("click", () => submit());
 input.addEventListener("input", () => {
   input.style.height = "auto";
   input.style.height = Math.min(96, input.scrollHeight) + "px";
-});
-$("chHome").addEventListener("click", async () => {
-  try{
-    const r = await (await fetch("/device/home", {method:"POST"})).json();
-    chip(r.ok ? "已叫云机返桌面" : "返桌面失败（adb 冇回应）");
-    if(r.ok){ slowLive = true; refreshLive(true); }
-  }catch(e){ chip("返桌面失败：" + e); }
 });
 $("chClear").addEventListener("click", async () => {
   try{
