@@ -298,10 +298,6 @@
            letter-spacing:.9px;color:var(--soft);text-transform:uppercase}
   .lp-head b{color:var(--fg);font-weight:600;letter-spacing:.6px}
   .lp-head span{margin-left:auto;font-size:6.38px;letter-spacing:.3.0px;text-transform:none}
-  .lpzoom{flex:0 0 auto;width:14px;height:14px;display:grid;place-items:center;padding:0;cursor:pointer;
-          font:9px/1 ui-monospace,Menlo,monospace;color:var(--soft);
-          background:var(--inset);border:1px solid var(--line);border-radius:4px}
-  .lpzoom:hover{color:var(--fg);border-color:var(--arrow2)}
   .live-head{display:flex;align-items:center;gap:4.5px;font:7.12px/1.5 ui-monospace,Menlo,monospace;
              letter-spacing:.9px;color:var(--soft);text-transform:uppercase}
   .ldot{width:5px;height:5px;border-radius:50%;background:var(--no)}
@@ -336,17 +332,7 @@
     #meta{max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   }
 
-  /* ── 点实况窗放大 ── */
-  #lb{position:fixed;inset:0;z-index:50;display:none;place-items:center;
-      background:rgba(0,0,0,.82);backdrop-filter:blur(3px)}
-  #lb.show{display:grid}
-  #lb img{max-height:88vh;max-width:88vw;border:1px solid rgba(125,211,252,.36);border-radius:6px;
-          box-shadow:0 30px 80px -30px #000}
-  #lb .lbx{position:absolute;top:13.5px;right:16.5px;font:8.25px/1.6 ui-monospace,Menlo,monospace;
-           letter-spacing:1px;color:#cfdae4;border:1px solid rgba(255,255,255,.25);border-radius:4px;
-           padding:4px 9px;cursor:pointer}
-
-  /* 模型框（云机框右边）紧凑化 */
+    /* 模型框（云机框右边）紧凑化 */
   #lm{flex:0 0 24px;min-width:18px;max-width:24px}
   .grp.remote .n{padding:7px 11px}
   .grp.remote small{max-width:90px;overflow:hidden;text-overflow:ellipsis}
@@ -650,7 +636,7 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
   </div><!-- /board -->
 
 <aside class="livepanel">
-  <div class="lp-head"><i class="ldot" id="ldot"></i><b>云机实况</b><span id="liveRes">—</span><button class="lpzoom" id="lbOpen" type="button" title="放大画面（画面本身系触摸区）">⤢</button></div>
+  <div class="lp-head"><i class="ldot" id="ldot"></i><b>云机实况</b><span id="liveRes">—</span></div>
   <div class="phone" id="liveBox" title="点一下＝点云机，拖动＝滑动">
     <img id="liveImg" alt="云机画面">
     <div class="off" id="liveOff"><b>云机离线</b><small id="liveOffSub">画面系旧帧</small></div>
@@ -665,7 +651,6 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
 
 </div><!-- /layout -->
 
-<div id="lb"><img id="lbImg" alt="云机画面 大图"><span class="lbx" id="lbX">ESC 关</span></div>
 
 <footer>
   <button id="plus" title="附加（未接）">+</button>
@@ -1094,7 +1079,6 @@ async function refreshLive(force){
     liveOff.classList.toggle("show", stale);
     ldot.classList.toggle("on", !stale);
     const cd = $("chDot"); if(cd) cd.classList.toggle("off", stale);
-    if(lb && lb.classList.contains("show")) lbImg.src = url;
   }catch(e){ liveOff.classList.add("show"); ldot.classList.remove("on"); }
   finally{ clearTimeout(kill); liveBusy = false; }
 }
@@ -1168,17 +1152,6 @@ $("keypad")?.addEventListener("click", async ev => {
   refreshLive(true);
 });
 
-// ── 点实况窗放大（Esc / 点背景关）──
-const lb = $("lb"), lbImg = $("lbImg");
-function openLb(){
-  lbImg.src = liveImg.src;
-  lb.classList.add("show");
-}
-function closeLb(){ lb.classList.remove("show"); }
-$("lbOpen").addEventListener("click", openLb);   // 画面本身系触摸区，唔可以再绑 click 放大
-$("lbX").addEventListener("click", closeLb);
-lb.addEventListener("click", e => { if(e.target === lb) closeLb(); });
-document.addEventListener("keydown", e => { if(e.key === "Escape") closeLb(); });
 
 setTimeout(() => { refreshLive(true); setInterval(refreshLive, 2600); }, 300);
 document.addEventListener("visibilitychange", () => { if(!document.hidden) refreshLive(true); });
