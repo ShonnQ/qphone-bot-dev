@@ -56,6 +56,10 @@
         padding:3.0px 8.25px;font:9.0px/1.4 ui-monospace,Menlo,monospace;color:var(--soft);
         background:linear-gradient(180deg,var(--inset),transparent)}
   .chip b{color:var(--fg);font-weight:600}
+  .chip.tgl{cursor:pointer;font-family:ui-monospace,Menlo,monospace;gap:4px;
+            color:var(--soft);transition:border-color .15s,color .15s}
+  .chip.tgl:hover{color:var(--fg);border-color:var(--arrow2)}
+  .chip.tgl #themeIcon{font-size:10px;line-height:1}
   #dot{width:7px;height:7px;border-radius:50%;background:var(--soft);box-shadow:0 0 0 0 transparent}
   #dot.on{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent)}
   #dot.off{background:var(--no)}
@@ -516,6 +520,8 @@
   #send svg{width:11px;height:11px;stroke:#fff5f5;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
   #send:disabled{opacity:.45;cursor:default;box-shadow:none}
 </style>
+<script>/* 主题要早过首帧，否则会闪一下默认亮色 */
+try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.setAttribute("data-theme","dark"); }catch(e){}</script>
 </head>
 <body>
 
@@ -529,6 +535,7 @@
     <span class="chip" id="stepChip">STEP <b id="stepChipN">00/00</b></span>
     <span class="chip"><b id="modelName">grok-4.7</b></span>
     <span class="chip"><span id="dot"></span><span id="meta">连紧…</span></span>
+    <button class="chip tgl" id="themeT" type="button" title="切换明暗主题" aria-label="切换明暗主题"><span id="themeIcon">☾</span><b id="themeTxt">暗</b></button>
   </div>
 </header>
 
@@ -737,6 +744,27 @@ async function refreshStatus(){
     if(cs) cs.textContent = "ANDROID " + (s.sdk === "33" ? "13" : (s.sdk || "?")) + " · " + port;
   }catch(e){ dot.className="off"; meta.textContent="服务未跑"; }
 }
+// ── 明暗开关（只换 token，不动版式）──
+const THEME_KEY = "qph-theme";
+function paintTheme(t){
+  const dark = t === "dark";
+  if(dark) document.documentElement.setAttribute("data-theme","dark");
+  else document.documentElement.removeAttribute("data-theme");
+  const ic = $("themeIcon"), tx = $("themeTxt");
+  if(ic) ic.textContent = dark ? "☀" : "☾";
+  if(tx) tx.textContent = dark ? "暗" : "亮";
+  const b = $("themeT");
+  if(b) b.title = dark ? "而家系暗色，按一下转亮色" : "而家系亮色，按一下转暗色";
+}
+function setTheme(t){ paintTheme(t); try{ localStorage.setItem(THEME_KEY, t); }catch(e){} }
+(function initTheme(){
+  let t = "light";
+  try{ t = localStorage.getItem(THEME_KEY) || (document.documentElement.getAttribute("data-theme")==="dark" ? "dark" : "light"); }catch(e){}
+  paintTheme(t);
+  const b = $("themeT");
+  if(b) b.addEventListener("click", () => setTheme(document.documentElement.getAttribute("data-theme")==="dark" ? "light" : "dark"));
+})();
+
 refreshStatus(); setInterval(refreshStatus, 8000);
 fetch("/health").then(r=>r.json()).then(h=>{
   if(!h.model) return;
