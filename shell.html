@@ -613,6 +613,23 @@
   #n_ui.tgt>.txt>b{display:block;margin:0 0 3px}
   #n_ui.tgt>.txt>small{display:block;white-space:normal;line-height:1.35}
   .grp.phone .handcol>.n.ok{border-color:var(--ok)}
+
+  /* v2.0 四只手嘅状态：用到就闪，冇用到就淡 */
+  @keyframes handblink{
+    0%   {border-color:var(--ok); background:color-mix(in srgb, var(--ok) 22%, var(--panel))}
+    60%  {border-color:var(--ok); background:color-mix(in srgb, var(--ok) 10%, var(--panel))}
+    100% {border-color:var(--line); background:transparent}
+  }
+  .handcol>.n.hot{border-color:var(--ok) !important;animation:handblink 1s ease-out 2}
+  .handcol>.n.ok{border-color:var(--ok);background:color-mix(in srgb, var(--ok) 9%, transparent)}
+  .handcol>.n.ok>.txt>b{color:var(--ok)}
+  .handcol>.n.miss{opacity:.62}
+  .handcol>.n.miss>.txt>small{color:var(--soft)}
+  .handcol>.n.skip{opacity:.42;border-style:dashed}
+  #n_ui.act{border-color:var(--ok);box-shadow:0 0 0 1px var(--ok) inset}
+  #n_ui.tgt.ok{border-color:var(--ok) !important;box-shadow:0 0 0 1px var(--ok) inset;
+    background:color-mix(in srgb, var(--ok) 9%, transparent)}
+  #n_ui.tgt.ok>.txt>b{color:var(--ok)}
 </style>
 <script>/* 主题要早过首帧，否则会闪一下默认亮色 */
 try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.setAttribute("data-theme","dark"); }catch(e){}</script>
@@ -796,6 +813,9 @@ let STEP_OF = 20, STEP_NOW = 0;
 const nowEl=$("now"), stepEl=$("stepno"), detailEl=$("detail"), progEl=$("prog"), pctEl=$("pct");
 
 const CHAIN = ["you","shell","turn","mob","portal","ui"];
+// 四只手：层 → 节点（paint() 唔管佢哋，靠 layerPaint 上色）
+const HANDS = {"L0":"n_adbd","L1a":"n_snap","L1b":"n_wv","L2":"n_portal"};
+const HAND_IDS = ["n_adbd","n_snap","n_wv","n_portal"];
 const NODES = ["you","shell","turn","l0","l1a","l1b","mob","model","portal","ui"]
   .reduce((m,k)=>{ m[k]=$("n_"+k); return m; }, {});
 const LINKS = ["l1","l2","l3","l4","l5"].map($).filter(Boolean);
@@ -809,6 +829,11 @@ const LSUB = {L0:"确定性命令", L1a:"无障碍控件树", L1b:"网页直点"
 const LSTATE = {};                       // L0/L1a/L1b/L2 → hit | miss | skip
 // 命中强调：复用 amberblink 参数（inset 2px 实黄、1.1s、2 次），唔改 class 以免被 paint() 抹
 const PULSED = {};                        // 一单每层只闪一次
+function pulseOnce(el, cls, ms){
+  el.classList.add(cls);
+  clearTimeout(el.__pt);
+  el.__pt = setTimeout(() => el.classList.remove(cls), ms);
+}
 function pulseLayer(nd, key){
   if(!nd || !nd.animate || PULSED[key]) return;
   PULSED[key] = true;
@@ -819,7 +844,22 @@ function pulseLayer(nd, key){
     {boxShadow:"inset 0 0 0 2px rgba(251,191,36,.45)"}
   ], {duration:1100, iterations:2, easing:"ease-in-out"});
 }
+function handsPaint(){
+  const used = LAYER_USED;
+  HAND_IDS.forEach(id => {
+    const nd = $(id); if(!nd) return;
+    nd.classList.remove("hot","ok","miss","skip");
+    const L = Object.keys(HANDS).find(k => HANDS[k] === id);
+    if(!L) return;
+    const st = LSTATE[L];
+    if(st === "hit") nd.classList.add("ok");
+    else if(st === "miss") nd.classList.add("miss");
+    else if(st === "skip") nd.classList.add("skip");
+    else if(used && L !== used) nd.classList.add("skip");   // 有单跑紧但未轮到佢
+  });
+}
 function layerPaint(){
+  handsPaint();
   Object.entries(LKEY).forEach(([L, key]) => {
     const nd = NODES[key], sm = $("s_" + key);
     if(!nd) return;
@@ -847,12 +887,21 @@ function layerMark(o){
     LAYER_USED = o.layer; LAYER_LABEL = o.label || "";
     LSTATE[o.layer] = "hit";
     if(sm) sm.textContent = (o.ms ? "命中 · " + o.ms + " ms" : "命中");
-    if(o.layer !== "L2") LSTATE["L2"] = LSTATE["L2"] || "skip";
-    for(const L of ["L0","L1a","L1b"]){        // 前面被跳过嘅层标「未命中」
-      if(L !== o.layer && !LSTATE[L]) LSTATE[L] = "miss";
-    }
+    // 命中层之前嗰啲＝试过但唔得（miss）；之后嗰啲＝根本未轮到（skip）
+    const ORDER = ["L0","L1a","L1b","L2"], hi = ORDER.indexOf(o.layer);
+    ORDER.forEach((L, i) => {
+      if(L === o.layer || LSTATE[L]) return;
+      LSTATE[L] = i < hi ? "miss" : "skip";
+    });
     const nd = NODES[key];
     if(nd){ nd.title = (o.cmds || []).join("\n") + (o.why ? "\n\n" + o.why : ""); pulseLayer(nd, o.layer); }
+    const hand = $(HANDS[o.layer]);            // 用到嗰只手：闪一格讲明呢层经边只手落地
+    if(hand){
+      hand.title = (o.cmds || []).join("\n") + (o.why ? "\n\n" + o.why : "");
+      hand.classList.remove("hot","ok","skip");
+      hand.classList.add("hot");
+      pulseOnce(hand, "hot", 2100);
+    }
     NODES.portal.classList.add("skip");        // L0/L1 唔经 Portal（L2 会喺 paint 复原）
     if(o.layer === "L2") NODES.portal.classList.remove("skip");
   }else{
@@ -891,10 +940,12 @@ function paint(st){
     if(LM) LM.classList.add("on");
     if(VLINK) VLINK.classList.add("on"); }
   if(p === "done"){ NODES.ui.classList.add("ok"); NODES.ui.classList.remove("hot"); }
+  if(p === "act" || p === "step") NODES.ui.classList.add("act");   // 有只手真系落咗喺屏上
   if(p === "human") NODES.you.classList.add("bad");
   if(LAYER_USED){                            // 层标记喺每次重绘后复原（paint 会清 className）
-    if(LAYER_USED !== "L2") NODES.portal.classList.add("skip");
-    layerPaint();
+    layerPaint();                            // handsPaint() 会顺手标「未轮到」嗰三只手
+  }else{
+    handsPaint();
   }
   if(typeof alignComms === "function") alignComms();   // 节点宽度变咗都保持对准
 

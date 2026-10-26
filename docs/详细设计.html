@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.30</title>
+<title>QPhone 详细设计说明书 v0.31</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -51,10 +51,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.30</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.31</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.30</p>
+<p>版本：v0.31</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -282,6 +282,12 @@ strong{font-weight:700}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.31</td>
+<td>四只手<strong>运行时会高亮</strong>：命中嗰只闪两下转常亮绿框，试过但唔得嘅变淡（opacity .62），未轮到嘅走虚线（opacity .42）；<code>云机 UI</code> 在 <code>act/step</code> 时描边高亮、完成转绿。顺带修 <code>layerMark()</code> 语义：命中层<strong>之前</strong>标「未命中」、<strong>之后</strong>标「未轮到」（原来全部一律标未命中，L0 命中都话 L1a/L1b「未命中」）。</td>
+<td>C</td>
+<td><span class="nowrap">2026-10-26</span></td>
+</tr>
 <tr>
 <td>v0.30</td>
 <td>云机段版面再调：四只手竖排成<strong>左列</strong>，右边一大格「云机 UI · 前台 App」与四手<strong>并排</strong>（四条短箭头由每格右边指过去，表达「四只手都落喺 UI」）；控制台与架构图一致。</td>
