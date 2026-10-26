@@ -141,6 +141,24 @@
   .vlink.on{background:linear-gradient(180deg,var(--acc1),var(--acc2));box-shadow:0 0 8px var(--acc1)}
 
   /* ── 状态条 ── */
+  .layers{display:flex;align-items:center;gap:7px;margin-top:16px;flex-wrap:wrap}
+  .lglabel{font:8.6px/1 ui-monospace,Menlo,monospace;letter-spacing:.6px;color:var(--soft);
+           text-transform:uppercase;margin-right:2px}
+  .lchip{display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:8px;
+         border:1px solid var(--line2);background:var(--panel2);color:var(--soft);
+         transition:border-color .18s, background .18s, color .18s}
+  .lchip b{font:10.5px/1 ui-monospace,Menlo,monospace;font-weight:800;letter-spacing:.2px}
+  .lchip small{font-size:9.6px;letter-spacing:.2px}
+  .lchip i{font:8.6px/1 ui-monospace,Menlo,monospace;font-style:normal;color:var(--soft);opacity:.7;
+           font-variant-numeric:tabular-nums}
+  .lchip.hit{border-color:var(--acc1);background:color-mix(in srgb, var(--acc1) 10%, var(--panel2));
+             color:var(--fg);box-shadow:0 0 0 1px color-mix(in srgb, var(--acc1) 30%, transparent) inset}
+  .lchip.hit b{color:var(--acc1)}
+  .lchip.hit i{color:var(--acc1);opacity:1;font-weight:700}
+  .lchip.skip{border-color:var(--line2);opacity:.5}
+  .lchip.miss{opacity:.42;text-decoration:line-through;text-decoration-thickness:1px}
+  .n.skip{opacity:.38;filter:saturate(.4)}
+  .n.skip .txt b::after{content:"（未用）";font-size:7.6px;color:var(--soft);font-weight:500;letter-spacing:0}
   .status{display:flex;align-items:flex-end;gap:14px;margin-top:18px;flex-wrap:wrap}
   .now{font-size:15.0px;font-weight:700;letter-spacing:.1.5px;line-height:1.2}
   .stepno{font:9.0px/1.6 ui-monospace,Menlo,monospace;color:var(--soft);letter-spacing:.3.75px;
@@ -614,6 +632,14 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
 
 
 
+  <div class="layers" id="layers" aria-label="执行层">
+    <span class="lglabel">执行层</span>
+    <div class="lchip" data-l="L0"><b>L0</b><small>确定性</small><i>未用</i></div>
+    <div class="lchip" data-l="L1a"><b>L1a</b><small>无障碍</small><i>未用</i></div>
+    <div class="lchip" data-l="L1b"><b>L1b</b><small>WebView</small><i>未用</i></div>
+    <div class="lchip" data-l="L2"><b>L2</b><small>视觉</small><i>未用</i></div>
+  </div>
+
   <div class="status">
     <span class="now" id="now">等紧你讲嘢</span>
     <span class="stepno" id="stepno"></span>
@@ -675,6 +701,39 @@ const LINKS = ["l1","l2","l3","l4","l5"].map($).filter(Boolean);
 const LK_BASE = {l1:"link", l2:"link", l3:"link", l4:"link dash bi", l5:"link"};
 const VLINK = $("lv"), LM = $("lm");
 
+// ── 执行层标记（L0 / L1a / L1b / L2）──
+let LAYER_USED = "", LAYER_LABEL = "";
+const LCHIPS = Array.from(document.querySelectorAll(".lchip"));
+function layerReset(){
+  LAYER_USED = ""; LAYER_LABEL = "";
+  LCHIPS.forEach(c => { c.className = "lchip"; c.querySelector("i").textContent = "未用"; });
+  ["mob","portal"].forEach(k => NODES[k] && NODES[k].classList.remove("skip"));
+}
+function layerMark(o){
+  const chip = LCHIPS.find(c => c.dataset.l === o.layer);
+  if(o.skip){                                   // 呢层冇呢个能力：划走
+    if(chip){ chip.classList.add("miss"); chip.querySelector("i").textContent = "未命中"; }
+    return;
+  }
+  if(!chip) return;
+  if(o.ok){
+    LAYER_USED = o.layer; LAYER_LABEL = o.label || "";
+    chip.classList.add("hit");
+    chip.querySelector("i").textContent = (o.ms ? o.ms + "ms" : "命中");
+    // L0/L1a/L1b 唔经 Mobilerun / Portal：标记为未用
+    if(o.layer !== "L2"){
+      ["mob","portal"].forEach(k => NODES[k] && NODES[k].classList.add("skip"));
+    }
+    const nowEl = $("now");
+    if(nowEl) nowEl.textContent = o.layer + " · " + (o.label || "");
+    chip.title = (o.cmds || []).join("\n") + (o.why ? "\n\n" + o.why : "");
+  }else{
+    chip.classList.add("miss");
+    chip.querySelector("i").textContent = o.ms ? o.ms + "ms ✗" : "失败";
+    chip.title = (o.why || "") + ((o.cmds || []).length ? "\n" + o.cmds.join("\n") : "");
+  }
+}
+
 function paint(st){
   Object.values(NODES).forEach(n => n.className = "n");
   LINKS.forEach(l => l.className = LK_BASE[l.id] || "link");
@@ -703,11 +762,16 @@ function paint(st){
     if(VLINK) VLINK.classList.add("on"); }
   if(p === "done"){ NODES.ui.classList.add("ok"); NODES.ui.classList.remove("hot"); }
   if(p === "human") NODES.you.classList.add("bad");
+  if(LAYER_USED && LAYER_USED !== "L2"){     // 走咗 L0/L1：Mobilerun、Portal 冇参与
+    ["mob","portal"].forEach(k => NODES[k] && NODES[k].classList.add("skip"));
+  }
   if(typeof alignComms === "function") alignComms();   // 节点宽度变咗都保持对准
 
   const labels = {idle:"等紧你讲嘢", turn:"交畀 /turn", step:"Mobilerun 睇屏",
                   think:"模型谂紧", act:"Portal 做紧", human:"要人睇一眼", done:"做完", chat:"对话中"};
   nowEl.textContent = labels[p] || p;
+  if(LAYER_USED && p !== "idle" && p !== "chat")
+    nowEl.textContent = LAYER_USED + " · " + (LAYER_LABEL || labels[p] || "");
   const sc = $("stepChip");
   if(st.of && st.of > 0){
     sc.classList.add("on");
@@ -872,6 +936,7 @@ async function submit(forceMode, echoText){
   say("me", text);
   typing(true);
   const mode = forceMode || "auto";
+  layerReset();
   try{
     const resp = await fetch("/turn", {method:"POST", headers:{"Content-Type":"application/json"},
                                       body: JSON.stringify({text, mode})});
@@ -891,6 +956,8 @@ async function submit(forceMode, echoText){
         let o = {}; try{ o = JSON.parse(data); }catch(_){}
         if(ev === "intent"){
           if(o.mode === "task"){ typing(false); paint({phase:"turn"}); }
+        }else if(ev === "layer"){
+          layerMark(o);
         }else if(ev === "task_started"){
           typing(false); chip("<b>1 条任务</b> · 交畀 Mobilerun"); taskStart();
         }else if(ev === "chat"){

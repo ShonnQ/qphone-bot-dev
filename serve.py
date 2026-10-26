@@ -41,6 +41,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 HERE = Path(__file__).resolve().parent
+import layers   # L0 / L1a / L1b 执行层（同目录）
 BIND = os.environ.get("QPHONE_BIND", "127.0.0.1")
 PORT = int(os.environ.get("QPHONE_PORT", "8777"))
 TARGET = os.environ.get("QPHONE_TARGET", "localhost:5556")
@@ -301,6 +302,25 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
     started = time.time()
     route = llm_route()
     _pub(q, "turn")
+
+    # ── 先试确定性三层（L0 → L1a → L1b）；全唔中才落 L2 视觉 ──
+    try:
+        tr = layers.route(text, emit=lambda ev, data: q.put((ev, data)))
+    except Exception as e:  # noqa: BLE001
+        tr = None
+        q.put(("progress", {"line": f"L0–L1b 路由异常：{e}"}))
+    if tr and tr.get("ok"):
+        detail = f"{tr['layer']} · {tr['label']} · {tr['ms']} ms" + (f" · {tr['why']}" if tr.get("why") else "")
+        q.put(("progress", {"line": detail}))
+        _pub(q, "step", step=1, of=1, action=f"{tr['layer']} {tr['label']}")
+        LAST_RESULT.update(ok=True, msg=detail, ts=time.time())
+        hist_task_update(CURRENT_TASK["id"], phase="done", msg=detail[:300])
+        _pub(q, "done", action="")
+        q.put(("result", {"success": True, "message": f"{tr['label']}（{tr['layer']}，{tr['ms']} ms）"}))
+        q.put(("_end", {}))          # L0/L1 已直接落到目标态，唔按 home 复位
+        return
+    q.put(("layer", {"layer": "L2", "label": "转视觉（Mobilerun）", "cmds": ["mobilerun run"],
+                     "ms": 0, "ok": True, "why": "L0/L1a/L1b 未命中"}))
     try:
         cmd = [
             mobilerun_bin(), "run", text,
@@ -1113,7 +1133,7 @@ class Handler(BaseHTTPRequestHandler):
 
         KIND = {"activity": "task", "status": "status", "progress": "task", "result": "task",
                 "needs_human": "human", "trajectory": "task", "chat": "chat",
-                "clarify": "unclear", "intent": "meta"}
+                "clarify": "unclear", "intent": "meta", "layer": "task"}
 
         alive = {"ok": True}
 

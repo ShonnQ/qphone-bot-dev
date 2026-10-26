@@ -1,0 +1,637 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""QPhone 执行层：L0 确定性 / L1a 无障碍结构 / L1b WebView CDP。
+
+设计原则
+- 只做「一句话 → 一组确定命令」，命中就跑，唔命中就返回 None 交下一层，最后才 L2 视觉。
+- 每层都要回一个 trace（layer / label / cmds / ms / ok / why），壳靠它标记走咗边层。
+- 断言用设备真状态（topResumedActivity / settings get / 快照 diff），唔靠命令 exit code。
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import os
+import re
+import shutil
+import socket
+import struct
+import subprocess
+import time
+import urllib.request
+from urllib.parse import quote
+
+ADB = os.environ.get("QPHONE_ADB", os.path.expanduser("~/Library/Android/sdk/platform-tools/adb"))
+TARGET = os.environ.get("QPHONE_TARGET", "localhost:5556")
+SERIAL = TARGET
+
+
+# ─────────────────────────────── 基础命令
+def adb(*args: str, timeout: float = 25.0, binary: bool = False):
+    cmd = [ADB, "-s", TARGET] + list(args)
+    cp = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    if binary:
+        return cp.returncode, cp.stdout
+    return cp.returncode, cp.stdout.decode("utf-8", "replace")
+
+
+def sh(cmd: str, timeout: float = 25.0) -> str:
+    return adb("shell", cmd, timeout=timeout)[1]
+
+
+def now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def trace(layer: str, label: str, cmds: list[str], t0: float, ok: bool, why: str = "") -> dict:
+    return {"layer": layer, "label": label, "cmds": cmds,
+            "ms": now_ms() - int(t0 * 1000), "ok": ok, "why": why}
+
+
+# ─────────────────────────────── 设备状态读取
+def foreground() -> str:
+    """当前前台：com.pkg/.Activity（读唔到就空串）。"""
+    out = sh("dumpsys activity activities | grep -m1 topResumedActivity")
+    m = re.search(r"u0 ([\w\.]+)/([\w\.\$]+)", out)
+    return f"{m.group(1)}/{m.group(2)}" if m else ""
+
+
+def fg_package() -> str:
+    return foreground().split("/")[0]
+
+
+def screen_size() -> tuple[int, int]:
+    out = sh("wm size")
+    m = re.search(r"(\d+)x(\d+)", out)
+    return (int(m.group(1)), int(m.group(2))) if m else (720, 1280)
+
+
+# ─────────────────────────────── L0：确定性能力表
+# app 别名 → 包名。粤语叫法尽量齐，搵唔到就 L0 miss（交 L1a/L2）。
+APP_ALIASES = {
+    "设置": "com.android.settings", "设定": "com.android.settings", "設定": "com.android.settings",
+    "相机": "com.android.camera2", "相机app": "com.android.camera2", "影相": "com.android.camera2",
+    "时钟": "com.android.deskclock", "闹钟": "com.android.deskclock", "钟": "com.android.deskclock",
+    "联系人": "com.android.contacts", "通讯录": "com.android.contacts",
+    "电话": "com.android.dialer", "拨号": "com.android.dialer",
+    "文件": "com.android.documentsui", "档案": "com.android.documentsui", "文件管理": "com.android.documentsui",
+    "图库": "com.android.gallery3d", "相册": "com.android.gallery3d", "相簿": "com.android.gallery3d",
+    "浏览器": "org.chromium.webview_shell", "网页": "org.chromium.webview_shell",
+    "日历": "com.android.calendar", "计算器": "com.android.calculator2",
+    "短信": "com.android.messaging", "信息": "com.android.messaging",
+    "设置页": "com.android.settings", "portal": "com.mobilerun.portal",
+    "qphone": "com.mobilerun.portal", "助手": "com.mobilerun.portal",
+}
+
+NOISE = ("帮我", "同我", "麻烦你", "请", "唔该", "我想", "我要", "即刻", "一下", "下", "啦", "吖", "呀", "吓")
+
+
+def clean(text: str) -> str:
+    t = text.strip().strip("。！!？?，,")
+    for w in NOISE:
+        t = t.replace(w, "")
+    return t.strip()
+
+
+def resolve_package(word: str) -> str:
+    """别名表 → 包名精确匹配 → 包名 token 模糊。搵唔到返空串。"""
+    w = word.strip().lower().replace(" ", "")
+    if not w:
+        return ""
+    for k, v in APP_ALIASES.items():
+        if k in w:
+            return v
+    pkgs = [l.split(":", 1)[-1].strip() for l in sh("pm list packages -3").splitlines()]
+    pkgs += [l.split(":", 1)[-1].strip() for l in sh("pm list packages").splitlines()]
+    for p in pkgs:
+        if w and w in p.lower():
+            return p
+    return ""
+
+
+def set_brightness(level: int) -> bool:
+    sh("settings put system screen_brightness_mode 0")
+    sh(f"settings put system screen_brightness {max(0, min(255, level))}")
+    got = sh("settings get system screen_brightness").strip()
+    return got.isdigit() and int(got) == max(0, min(255, level))
+
+
+def volume(op: str, arg: str = "") -> bool:
+    if arg.isdigit():
+        sh(f"cmd media_session volume --stream 3 --set {arg}")
+    elif op in ("raise", "up", "大"):
+        for _ in range(3):
+            sh("cmd media_session volume --stream 3 --adj raise")
+    elif op in ("lower", "down", "细", "小"):
+        for _ in range(3):
+            sh("cmd media_session volume --stream 3 --adj lower")
+    elif op in ("mute", "静音"):
+        sh("cmd media_session volume --stream 3 --set 0")
+    return True
+
+
+def keyevent(code: int) -> bool:
+    return adb("shell", "input", "keyevent", str(code))[0] == 0
+
+
+def tap(x: int, y: int) -> bool:
+    return adb("shell", "input", "tap", str(x), str(y))[0] == 0
+
+
+def swipe(x1, y1, x2, y2, ms=300) -> bool:
+    return adb("shell", "input", "swipe", str(x1), str(y1), str(x2), str(y2), str(ms))[0] == 0
+
+
+def open_app(pkg: str) -> tuple[bool, str, str]:
+    """redroid 上 monkey 唔启得动（冇输出），要用 resolve-activity + am start -W。"""
+    t0 = time.time()
+    brief = [l.strip() for l in sh(f"cmd package resolve-activity --brief {pkg}").splitlines() if "/" in l]
+    comp = brief[-1] if brief else ""
+    if comp:
+        adb("shell", "am", "start", "-W", "-n", comp, timeout=25)
+    else:
+        adb("shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1", timeout=20)
+    for _ in range(18):                      # 等前台转过去，最多 ~3.6s
+        time.sleep(0.2)
+        if fg_package() == pkg:
+            return True, f"{int((time.time()-t0)*1000)}ms 到前台", f"am start -W -n {comp}"
+    return False, f"前台仍系 {fg_package() or '未知'}", f"am start -W -n {comp}"
+
+
+def l0_try(text: str) -> dict | None:
+    """命中就返回 {layer,label,cmds,ok,why,ms}；唔命中返回 None。"""
+    raw = text.strip()
+    t = clean(raw)
+    t0 = time.time()
+
+    # 1) 打开 app
+    m = re.match(r"^(?:打开|开|启动|开启|进入|run|open)\s*(.+?)(?:app|应用|应用程式)?$", t, re.I)
+    if m:
+        name = m.group(1).strip()
+        pkg = resolve_package(name)
+        if pkg:
+            ok, why, cmd = open_app(pkg)
+            return trace("L0", f"打开 {name}", [cmd], t0, ok, why or pkg)
+
+    # 2) 桌面 / 返回
+    if re.search(r"(回|返|去).{0,3}(桌面|主页|首页|home)", t, re.I):
+        ok = keyevent(3)
+        return trace("L0", "回桌面", ["input keyevent 3"], t0, ok)
+    if re.match(r"^(返回|后退|back|退返)$", t, re.I):
+        ok = keyevent(4)
+        return trace("L0", "返回", ["input keyevent 4"], t0, ok)
+
+    # 3) 关 app / 清数据 / 卸载
+    m = re.match(r"^(?:关掉|关闭|杀掉|force.?stop|结束)\s*(.+)$", t) or re.match(r"^关\s*(.+)$", t)
+    if m:
+        pkg = resolve_package(m.group(1))
+        if pkg:
+            sh(f"am force-stop {pkg}")
+            ok = fg_package() != pkg
+            return trace("L0", f"关 {m.group(1)}", [f"am force-stop {pkg}"], t0, ok)
+    m = re.match(r"^(?:清除?|清空)(.+?)(?:的)?数据$", t)
+    if m:
+        pkg = resolve_package(m.group(1))
+        if pkg:
+            out = sh(f"pm clear {pkg}")
+            return trace("L0", f"清 {m.group(1)} 数据", [f"pm clear {pkg}"], t0, "Success" in out, out.strip()[:60])
+    m = re.match(r"^(?:卸载|删掉|移除)\s*(.+)$", t)
+    if m:
+        pkg = resolve_package(m.group(1))
+        if pkg:
+            out = sh(f"pm uninstall {pkg}")
+            return trace("L0", f"卸载 {m.group(1)}", [f"pm uninstall {pkg}"], t0, "Success" in out, out.strip()[:60])
+
+    # 4) 音量 / 亮度
+    m = re.match(r"^音量\s*(调大|大|加|调细|细|小|减|静音|\d+)$", t)
+    if m:
+        a = m.group(1)
+        volume(a, a)
+        return trace("L0", f"音量 {a}", ["cmd media_session volume"], t0, True)
+    m = re.match(r"^(?:调|设|改|设成)?(?:屏幕)?亮度\s*(?:调到|调成|设成|改成|到)?\s*(\d{1,3})$", t)
+    if m:
+        ok = set_brightness(int(m.group(1)))
+        return trace("L0", f"亮度 {m.group(1)}", ["settings put screen_brightness"], t0, ok)
+
+    # 5) 开关 Wi-Fi / 蓝牙 / 飞行
+    m = re.match(r"^(打开|开启|开|关闭|关掉|关)\s*(wifi|wi-fi|无线|蓝牙|飞行模式)$", t, re.I)
+    if m:
+        on = m.group(1) in ("打开", "开启", "开")
+        what = m.group(2).lower()
+        if what in ("wifi", "wi-fi", "无线"):
+            sh(f"svc wifi {'enable' if on else 'disable'}")
+            want = "enabled" if on else "disabled"
+            got = sh("cmd wifi status").lower()
+            ok = want in got or ("enable" in got) == on
+            return trace("L0", f"{'开' if on else '关'} Wi-Fi", [f"svc wifi"], t0, ok, got.split("\n")[0][:60])
+        if what == "蓝牙":
+            sh(f"cmd bluetooth_manager {'enable' if on else 'disable'}")
+            got = sh("settings get global bluetooth_on").strip()
+            return trace("L0", f"{'开' if on else '关'} 蓝牙", ["cmd bluetooth_manager"], t0, got == ("1" if on else "0"), f"bluetooth_on={got}")
+        sh(f"cmd connectivity airplane-mode {'enable' if on else 'disable'}")
+        got = sh("settings get global airplane_mode_on").strip()
+        return trace("L0", f"{'开' if on else '关'} 飞行模式", ["cmd connectivity airplane-mode"], t0, got == ("1" if on else "0"), f"airplane_mode_on={got}")
+
+    # 6) 截图 / 录屏
+    if re.search(r"(截图|截屏|screenshot)", t, re.I):
+        p = f"/sdcard/qphone-{int(time.time())}.png"
+        sh(f"screencap -p {p}")
+        size = sh(f"ls -l {p}").split()
+        ok = len(size) > 4
+        return trace("L0", "截图", [f"screencap -p {p}"], t0, ok, p)
+
+    # 7) 装包 / 列包 / 属性
+    m = re.match(r"^(?:安装|装)\s*(\S+\.apk|\S+)$", t)
+    if m:
+        path = m.group(1)
+        if path.endswith(".apk"):
+            out = adb("shell", "pm", "install", "-r", path, timeout=90)[1]
+            ok = "Success" in out
+            return trace("L0", f"装 {path.split('/')[-1]}", [f"pm install -r {path}"], t0, ok, out.strip()[:80])
+    if re.search(r"(列|睇|有咩|有什么).{0,2}(包|app|应用)", t):
+        out = sh("pm list packages -3")
+        return trace("L0", "列出已装应用", ["pm list packages -3"], t0, bool(out.strip()), f"{len(out.splitlines())} 个")
+    m = re.match(r"^(?:属性|getprop)\s*(\S+)$", t)
+    if m:
+        out = sh(f"getprop {m.group(1)}").strip()
+        return trace("L0", f"读属性 {m.group(1)}", [f"getprop {m.group(1)}"], t0, bool(out), out[:60])
+
+    # 8) 开网址
+    m = re.match(r"^(?:打开|开|去)\s*((?:https?://)\S+)$", t, re.I)
+    if m:
+        url = m.group(1)
+        adb("shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url, timeout=25)
+        ok = bool(fg_package())
+        return trace("L0", f"开网址 {url[:40]}", ["am start -a VIEW"], t0, ok, fg_package())
+
+    # 9) 点坐标 / 滑动 / 按键 / ASCII 输入
+    m = re.match(r"^(?:点|点击|tap)\s*[（(]?\s*(\d{1,4})\s*[,，\s]\s*(\d{1,4})", t)
+    if m:
+        ok = tap(int(m.group(1)), int(m.group(2)))
+        return trace("L0", f"点 ({m.group(1)}, {m.group(2)})", ["input tap"], t0, ok)
+    m = re.match(r"^(?:滑|滑动|swipe)\s*[（(]?\s*(\d{1,4})\s*[,，\s]\s*(\d{1,4})\s*[)）,，\s]+\s*(\d{1,4})\s*[,，\s]\s*(\d{1,4})", t)
+    if m:
+        ok = swipe(*[int(x) for x in m.groups()])
+        return trace("L0", "滑动", ["input swipe"], t0, ok)
+    m = re.match(r"^(?:输入|打|type)\s+([\x20-\x7e]{1,120})$", t, re.I)
+    if m:
+        adb("shell", "input", "text", m.group(1).replace(" ", "%s"))
+        return trace("L0", f"输入 {m.group(1)[:20]}", ["input text"], t0, True)
+
+    # 10) 查前台
+    if re.search(r"前台|(而家|现在|当前).{0,2}(系咩|什么|边个|哪个)|(系咩|什么).{0,2}(app|应用|界面)", t, re.I):
+        fg = foreground()
+        return trace("L0", "查前台", ["dumpsys activity activities"], t0, bool(fg), fg or "读唔到")
+
+    return None
+
+
+# ─────────────────────────────── L1a：无障碍结构（agent-device 快照 + 语义动作）
+_AD_CACHE = {"nodes": [], "hash": "", "at": 0.0}
+
+
+def snapshot(force: bool = False, ttl: float = 0.5) -> dict:
+    """agent-device 快照（暖 0.12s）。同一次任务内短 TTL 缓存。"""
+    if not force and _AD_CACHE["nodes"] and time.time() - _AD_CACHE["at"] < ttl:
+        return {"nodes": _AD_CACHE["nodes"], "cached": True}
+    try:
+        cp = subprocess.run(["agent-device", "snapshot", "-i", "--serial", TARGET, "--json"],
+                            capture_output=True, text=True, timeout=40)
+        data = json.loads(cp.stdout or "{}")
+        nodes = (data.get("data") or {}).get("nodes") or []
+    except Exception:                                     # noqa: BLE001
+        nodes = []
+    if nodes:
+        h = hashlib.md5(json.dumps(nodes, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        _AD_CACHE.update(nodes=nodes, hash=h, at=time.time())
+    return {"nodes": nodes, "hash": _AD_CACHE["hash"], "cached": False}
+
+
+
+# 设备 a11y 树系英文（AOSP 默认 en-US），用户讲中文 → 需要一层常见词映射。
+# 只放「点得到」嘅高频项；命中唔到就 L1a miss，交 L2，唔硬猜。
+I18N = {
+    "网络和互联网": ("network", "internet"), "网络": ("network",), "互联网": ("internet",),
+    "wifi": ("wi-fi", "wifi"), "蓝牙": ("bluetooth",), "已连接设备": ("connected devices",),
+    "连接设备": ("connected devices",), "应用": ("apps",), "应用程式": ("apps",),
+    "通知": ("notifications",), "电池": ("battery",), "存储": ("storage",), "储存": ("storage",),
+    "声音": ("sound",), "显示": ("display",), "位置": ("location",), "安全": ("security",),
+    "隐私": ("privacy",), "系统": ("system",), "关于手机": ("about phone",), "关于": ("about",),
+    "语言和输入法": ("languages", "input"), "语言": ("languages",), "输入法": ("input",),
+    "无障碍": ("accessibility",), "数字健康": ("digital wellbeing",), "用户": ("users",),
+    "账号": ("accounts",), "账户": ("accounts",), "搜索": ("search",), "设置": ("settings",),
+    "返回": ("back",), "主页": ("home",), "桌面": ("home",), "多任务": ("overview", "recent"),
+    "确定": ("ok", "confirm", "yes"), "取消": ("cancel",), "保存": ("save",), "完成": ("done", "finish"),
+    "下一步": ("next",), "继续": ("continue",), "允许": ("allow",), "拒绝": ("deny", "don't allow"),
+    "相机": ("camera",), "时钟": ("clock",), "闹钟": ("alarm",), "图库": ("gallery", "photos"),
+    "相册": ("gallery", "photos"), "联系人": ("contacts",), "电话": ("phone", "dialer"),
+    "文件": ("files",), "日历": ("calendar",), "计算器": ("calculator",), "短信": ("messages", "sms"),
+    "浏览器": ("browser",), "网页": ("browser", "webview"), "设置页": ("settings",),
+    "列表": ("list",), "更多": ("more",), "菜单": ("menu",), "刷新": ("refresh", "reload"),
+    "分享": ("share",), "编辑": ("edit",), "删除": ("delete",), "新增": ("add", "new"),
+}
+
+
+def _norm(x: str) -> str:
+    return re.sub(r"[\s_\-&/·\u00a0]+", " ", (x or "").lower()).strip()
+
+
+def needle_variants(needle: str) -> list[str]:
+    """把一个中文/英文目标扩成多个可比字符串（含内置 i18n 映射）。"""
+    n = needle.strip().lower()
+    out = [n]
+    for zh, ens in I18N.items():
+        if zh in n:
+            out.extend(ens)
+    return [x for x in dict.fromkeys(out) if x]
+
+
+def _node_text(n: dict) -> str:
+    return " ".join(str(n.get(k) or "") for k in ("label", "identifier", "value", "hint")).lower()
+
+
+def find_node(nodes: list[dict], needle: str, editable: bool = False) -> dict | None:
+    """语义命中：精确 → 包含 → 中文↔英文映射 → 去空格模糊。优先 hittable + 可见。"""
+    if not needle.strip():
+        return None
+    cands = [n for n in nodes if n.get("hittable", True) and n.get("visibleToUser", True)
+             and not n.get("systemBar")]
+    if editable:
+        cands = [n for n in cands if n.get("editable")] or cands
+    variants = [v.lower() for v in needle_variants(needle)]
+    texts = [(n, _norm(_node_text(n))) for n in cands]
+    for v in variants:                                  # 先精确
+        for n, t in texts:
+            if t == _norm(v):
+                return n
+    for v in variants:                                  # 再包含
+        for n, t in texts:
+            if _norm(v) and _norm(v) in t:
+                return n
+    for v in variants:                                  # 最后去空格
+        vv = _norm(v).replace(" ", "")
+        for n, t in texts:
+            if vv and vv in t.replace(" ", ""):
+                return n
+    return None
+
+
+def node_center(n: dict) -> tuple[int, int] | None:
+    r = n.get("rect") or {}
+    if not r:
+        return None
+    return int(r["x"] + r["width"] / 2), int(r["y"] + r["height"] / 2)
+
+
+# 「点『设置』」「按确定」「点击 相机」之类：带引号或动词 + 短名词
+L1A_VERBS = r"(?:点击|点开|点|按下|按|选择|选|打开|进入|tap|click)"
+
+
+def l1a_try(text: str) -> dict | None:
+    t = clean(text)
+    m = re.search(L1A_VERBS + r"\s*[「『\"“']?([^」』\"”'\s，。]{1,12})[」』\"”']?", t, re.I)
+    if not m:
+        return None
+    target = m.group(1).strip()
+    if not target or re.fullmatch(r"\d+", target):
+        return None
+    t0 = time.time()
+    snap = snapshot()
+    if not snap["nodes"]:
+        return trace("L1a", f"找「{target}」", ["agent-device snapshot"], t0, False, "快照为空")
+    node = find_node(snap["nodes"], target)
+    if not node:
+        return {"layer": "L1a", "label": f"找「{target}」", "cmds": ["agent-device snapshot"],
+                "ms": now_ms() - int(t0 * 1000), "ok": False, "why": "无障碍树冇呢个控件", "miss": True}
+    c = node_center(node)
+    if not c:
+        return trace("L1a", f"找「{target}」", ["snapshot"], t0, False, "控件冇 bounds", )
+    before_fg, before_hash = fg_package(), snap["hash"]
+    tap(*c)
+    time.sleep(0.45)
+    after = snapshot(force=True)
+    ok = fg_package() != before_fg or after["hash"] != before_hash
+    why = f"{node.get('label') or node.get('identifier') or node.get('type')} @({c[0]},{c[1]})"
+    return trace("L1a", f"点「{target}」", ["agent-device snapshot", "input tap"], t0, ok, why)
+
+
+def l1a_snapshot_lines(limit: int = 8) -> list[str]:
+    """畀壳显示「无障碍树睇到咩」（调试用）。"""
+    nodes = snapshot(force=True)["nodes"]
+    out = []
+    for n in nodes[:limit]:
+        lab = n.get("label") or n.get("identifier") or n.get("type")
+        if lab:
+            out.append(str(lab)[:28])
+    return out
+
+
+# ─────────────────────────────── L1b：WebView CDP
+# 只有 App 自己开咗 setWebContentsDebuggingEnabled 先有 `@webview_devtools_remote_*` socket。
+# 实测本机 redroid：系统 WebView shell 出 socket，Portal 冇 → 冇 socket 就 L1b miss，交 L2。
+def webview_sockets() -> list[str]:
+    out = sh("cat /proc/net/unix")
+    return sorted(set(re.findall(r"@(webview_devtools_remote_\d+)", out)))
+
+
+def _free_port() -> int:
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+class _WS:
+    """够用嘅 WebSocket 客户端（CDP 只需要文本帧）。"""
+
+    def __init__(self, host: str, port: int, path: str, timeout: float = 8.0):
+        self.s = socket.create_connection((host, port), timeout=timeout)
+        key = base64.b64encode(os.urandom(16)).decode()
+        req = (f"GET {path} HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\n"
+               f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+        self.s.sendall(req.encode())
+        buf = b""
+        while b"\r\n\r\n" not in buf:
+            chunk = self.s.recv(4096)
+            if not chunk:
+                raise RuntimeError("CDP 握手失败")
+            buf += chunk
+        if b"101" not in buf.split(b"\r\n")[0]:
+            raise RuntimeError("CDP 拒绝升级：" + buf.split(b"\r\n")[0].decode("latin1"))
+
+    def send(self, text: str) -> None:
+        data = text.encode()
+        hdr = bytearray([0x81])
+        n = len(data)
+        if n < 126:
+            hdr.append(0x80 | n)
+        elif n < 65536:
+            hdr.append(0x80 | 126); hdr += struct.pack(">H", n)
+        else:
+            hdr.append(0x80 | 127); hdr += struct.pack(">Q", n)
+        mask = os.urandom(4)
+        hdr += mask
+        self.s.sendall(bytes(hdr) + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
+
+    def _read(self, n: int) -> bytes:
+        buf = b""
+        while len(buf) < n:
+            chunk = self.s.recv(n - len(buf))
+            if not chunk:
+                raise RuntimeError("CDP 连接断咗")
+            buf += chunk
+        return buf
+
+    def recv(self) -> str:
+        while True:
+            b1, b2 = self._read(2)
+            op = b1 & 0x0F
+            ln = b2 & 0x7F
+            if ln == 126:
+                ln = struct.unpack(">H", self._read(2))[0]
+            elif ln == 127:
+                ln = struct.unpack(">Q", self._read(8))[0]
+            payload = self._read(ln)
+            if op == 1:
+                return payload.decode("utf-8", "replace")
+            if op == 8:
+                raise RuntimeError("CDP 关闭")
+
+    def close(self) -> None:
+        try:
+            self.s.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+_CDP = {"port": 0, "sock": "", "ws": None, "tid": ""}
+
+
+def cdp_targets() -> list[dict]:
+    """起 adb forward + 拉 /json 目标表。冇 WebView 就返空。"""
+    socks = webview_sockets()
+    if not socks:
+        return []
+    sock = socks[0]
+    if _CDP["sock"] != sock or not _CDP["port"]:
+        port = _free_port()
+        adb("forward", f"tcp:{port}", f"localabstract:{sock}")
+        _CDP.update(port=port, sock=sock)
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{_CDP['port']}/json", timeout=5) as r:
+            return json.loads(r.read().decode() or "[]")
+    except Exception:                                     # noqa: BLE001
+        return []
+
+
+def cdp_eval(expr: str, timeout: float = 8.0) -> dict:
+    """喺 WebView 主 frame 跑一段 JS，返 {ok, value|error}。"""
+    targets = [t for t in cdp_targets() if t.get("type") == "page" and not t.get("url", "").startswith("devtools")]
+    if not targets:
+        return {"ok": False, "error": "冇 WebView 页面目标"}
+    url = targets[0].get("webSocketDebuggerUrl", "")
+    path = "/" + url.split("/", 3)[-1] if "://" in url else url
+    ws = _WS("127.0.0.1", _CDP["port"], path, timeout=timeout)
+    try:
+        ws.send(json.dumps({"id": 1, "method": "Runtime.evaluate",
+                            "params": {"expression": expr, "returnByValue": True, "awaitPromise": True}}))
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            msg = json.loads(ws.recv())
+            if msg.get("id") == 1:
+                res = msg.get("result", {})
+                if "exceptionDetails" in res:
+                    return {"ok": False, "error": str(res["exceptionDetails"].get("text"))[:160]}
+                return {"ok": True, "value": (res.get("result") or {}).get("value")}
+        return {"ok": False, "error": "CDP 超时"}
+    finally:
+        ws.close()
+
+
+CLICK_JS = """(() => {
+  const want = %s;
+  const els = Array.from(document.querySelectorAll(
+    'a,button,input,textarea,select,[role=button],[role=link],[contenteditable=true],label,li,span,div'));
+  const txt = e => ((e.innerText || e.value || e.getAttribute('aria-label') || '') + '').trim().toLowerCase();
+  let el = els.find(e => txt(e) === want) || els.find(e => txt(e).includes(want));
+  if(!el) return {ok:false, reason:'页面冇呢个文字'};
+  el.scrollIntoView({block:'center'});
+  el.click();
+  return {ok:true, tag:el.tagName, text:txt(el).slice(0,40)};
+})()"""
+
+FILL_JS = """(() => {
+  const want = %s, val = %s;
+  const els = Array.from(document.querySelectorAll('input,textarea,[contenteditable=true]'));
+  const el = els.find(e => ((e.getAttribute('aria-label')||e.placeholder||e.name||'') + '').toLowerCase().includes(want))
+          || els[0];
+  if(!el) return {ok:false, reason:'冇输入框'};
+  el.focus();
+  if('value' in el){ el.value = val; } else { el.textContent = val; }
+  el.dispatchEvent(new Event('input', {bubbles:true}));
+  el.dispatchEvent(new Event('change', {bubbles:true}));
+  return {ok:true, field:(el.getAttribute('aria-label')||el.placeholder||el.name||el.tagName)};
+})()"""
+
+
+def l1b_try(text: str) -> dict | None:
+    """只在「有 WebView 调试 socket」+ 句子里出现网页动作时尝试。"""
+    t = clean(text)
+    if not webview_sockets():
+        return None
+    m = re.search(L1A_VERBS + r"\s*[「『\"“']?([^」』\"”'\s，。]{1,12})[」』\"”']?", t, re.I)
+    t0 = time.time()
+    if m:
+        target = m.group(1)
+        r = cdp_eval(CLICK_JS % json.dumps(target.lower(), ensure_ascii=False))
+        ok = bool(r.get("ok") and (r.get("value") or {}).get("ok"))
+        val = r.get("value") or {}
+        return trace("L1b", f"网页点「{target}」", ["CDP Runtime.evaluate click"], t0, ok,
+                     (f"{val.get('tag')} {val.get('text','')}".strip() or r.get("error", ""))[:80])
+    m = re.search(r"(?:输入|填写|打)\s*[「『\"“']?([^」』\"”']{1,60})[」』\"”']?\s*(?:落|入|去|到)", t)
+    if m:
+        val = m.group(1)
+        r = cdp_eval(FILL_JS % ('""', json.dumps(val, ensure_ascii=False)))
+        ok = bool(r.get("ok") and (r.get("value") or {}).get("ok"))
+        return trace("L1b", f"网页填「{val[:12]}」", ["CDP Runtime.evaluate fill"], t0, ok,
+                     ((r.get("value") or {}).get("field") or r.get("error", ""))[:60])
+    return None
+
+
+# ─────────────────────────────── 路由器：L0 → L1a → L1b（→ 交 L2）
+def route(text: str, emit=None) -> dict | None:
+    """逐层试；成功就返该层 trace，全部唔得返 None（调用方转 L2）。"""
+    def fire(tr: dict) -> None:
+        if emit:
+            try:
+                emit("layer", {"layer": tr["layer"], "label": tr["label"],
+                               "cmds": tr["cmds"], "ms": tr["ms"],
+                               "ok": tr["ok"], "why": tr.get("why", "")})
+            except Exception:                              # noqa: BLE001
+                pass
+
+    chain = [("L0", l0_try), ("L1a", l1a_try), ("L1b", l1b_try)]
+    last = None
+    for name, fn in chain:
+        t0 = time.time()
+        try:
+            tr = fn(text)
+        except Exception as e:                             # noqa: BLE001
+            tr = {"layer": name, "label": "异常", "cmds": [], "ms": now_ms() - int(t0 * 1000),
+                  "ok": False, "why": str(e)[:120]}
+        if tr is None:
+            if emit:
+                try:
+                    emit("layer", {"layer": name, "label": "未命中", "cmds": [], "ms": 0,
+                                   "ok": False, "skip": True, "why": "能力表冇呢句"})
+                except Exception:                          # noqa: BLE001
+                    pass
+            continue
+        fire(tr)
+        if tr.get("ok"):
+            return tr
+        last = tr
+    return last if last and last.get("ok") else None
