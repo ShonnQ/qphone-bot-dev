@@ -597,11 +597,19 @@
   .sl-row.human .tag{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
   html[data-theme="dark"] .sl-row.l0 .tag{color:#FBBF24;border-color:rgba(251,191,36,.42)}
 
-  /* v1.6 云机内部：四条手 */
-  .grp.phone>.mrow.hands{gap:5px;flex-wrap:wrap}
-  .grp.phone>.mrow.hands>.n.xs{min-width:104px}
-  .grp.phone>.mrow{margin-top:0}
-  .grp.phone .n.xs.wide{min-width:260px;border-color:color-mix(in srgb, var(--ok) 30%, var(--line))}
+  /* v1.8 云机内部：四条手竖排（单行紧凑）
+     注意：paint() 会 className = "n " + state，任何附加 class 会被抹走 →
+     一律用结构选择器 .grp.phone>.mrow>.n，唔靠 .xs */
+  .grp.phone{flex-direction:column;align-items:stretch;gap:4px;min-width:196px}
+  .grp.phone>.gtag{align-self:flex-start;margin-bottom:2px}
+  .grp.phone>.mrow{flex-direction:column;align-items:stretch;gap:3px;margin:0;width:100%}
+  .grp.phone>.mrow>.n{min-width:0;width:100%;max-width:100%;box-sizing:border-box;overflow:hidden;
+    height:auto;min-height:0;padding:3px 8px;display:flex;align-items:baseline;justify-content:flex-start}
+  .grp.phone>.mrow>.n>.txt{display:block;line-height:1.3;min-width:0}
+  .grp.phone>.mrow>.n>.txt>b{display:inline;font-size:8.5px;white-space:nowrap;margin-right:6px}
+  .grp.phone>.mrow>.n>.txt>small{display:inline;font-size:7px;white-space:nowrap;color:var(--soft)}
+  .grp.phone>.mrow>.n.ok{border-color:var(--ok)}
+  #n_ui{border-color:color-mix(in srgb, var(--ok) 30%, var(--line))}
 </style>
 <script>/* 主题要早过首帧，否则会闪一下默认亮色 */
 try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.setAttribute("data-theme","dark"); }catch(e){}</script>
@@ -702,12 +710,12 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
           <span class="txt"><b>WebView socket</b><small>L1b CDP</small></span>
         </div>
         <div class="n xs" id="n_portal" title="com.mobilerun.portal · MobilerunAccessibilityService + MobilerunContentProvider">
-          <span class="txt"><b>Portal</b><small>L2 无障碍 + 手势</small></span>
+          <span class="txt"><b>Portal</b><small>L2 · 唯一用</small></span>
         </div>
       </div>
-      <div class="mrow">
+      <div class="mrow uiwrap">
         <div class="n xs wide" id="n_ui">
-          <span class="txt"><b>云机 UI · 前台 App</b><small id="uiSub">被点组件</small></span>
+          <span class="txt"><b>云机 UI</b><small id="uiSub">前台 App · 被点组件</small></span>
         </div>
       </div>
     </div><!-- /grp phone -->
