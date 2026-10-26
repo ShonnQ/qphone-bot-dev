@@ -45,7 +45,8 @@ import layers   # L0 / L1a / L1b 执行层（同目录）
 BIND = os.environ.get("QPHONE_BIND", "127.0.0.1")
 PORT = int(os.environ.get("QPHONE_PORT", "8777"))
 TARGET = os.environ.get("QPHONE_TARGET", "localhost:5556")
-HOME_AFTER = os.environ.get("QPHONE_HOME_AFTER", "1").lower() not in ("0", "false", "no", "off")
+# 做完唔自动返桌面（会令用户睇唔到 agent 做到边）；要回就设 QPHONE_HOME_AFTER=1
+HOME_AFTER = os.environ.get("QPHONE_HOME_AFTER", "0").lower() not in ("0", "false", "no", "off")
 ADB = os.environ.get("QPHONE_ADB", os.path.expanduser("~/Library/Android/sdk/platform-tools/adb"))
 MODEL = os.environ.get("QPHONE_MODEL", "grok-4.7")
 PROVIDER = os.environ.get("QPHONE_PROVIDER", "DeepSeek")  # 用 DeepSeek 档配自定 base_url；

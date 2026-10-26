@@ -317,7 +317,7 @@
 
   /* ── 右侧云机实况 ── */
   .stage{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:start}
-  .livepanel{display:flex;flex-direction:column;gap:8px;padding:12px 12px 10px;border-radius:10px;
+  .livepanel{display:flex;flex-direction:column;min-height:0;overflow:hidden;gap:8px;padding:12px 12px 10px;border-radius:10px;
              border:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel2));
              box-shadow:0 1px 0 var(--inset) inset, 0 24px 48px -36px rgba(0,0,0,.6)}
   .lp-head{display:flex;align-items:center;gap:4.5px;font:7.12px/1.5 ui-monospace,Menlo,monospace;
@@ -573,7 +573,7 @@
   .convwrap>footer .tele{padding-top:4px;margin-top:4px}
 
   /* ═════ v1.5 实况窗下面：步骤日志 ═════ */
-  .steplog{margin-top:2px;flex:1 1 auto;min-height:130px;display:flex;flex-direction:column;
+  .steplog{margin-top:2px;flex:1 1 0;min-height:120px;display:flex;flex-direction:column;
     border:1px solid var(--line);border-radius:10px;background:var(--panel2);overflow:hidden}
   .sl-hd{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px 4px;
     border-bottom:1px solid var(--line2);font:7px/1.4 ui-monospace,Menlo,monospace;color:var(--soft);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.26</title>
+<title>QPhone 详细设计说明书 v0.27</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -51,10 +51,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.26</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.27</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.26</p>
+<p>版本：v0.27</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -209,6 +209,12 @@ strong{font-weight:700}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.27</td>
+<td>①步骤日志超长唔滚（<code>.steplog</code> 用 <code>flex:1 1 auto</code> 跟内容长高，撑爆右栏）→ 改 <code>flex:1 1 0</code> + <code>.livepanel{min-height:0;overflow:hidden}</code>，日志内部滚动；②任务完成后<strong>取消默认回桌面</strong>（<code>QPHONE_HOME_AFTER</code> 默认 <code>0</code>，要回自己设 <code>1</code>）。</td>
+<td>C</td>
+<td><span class="nowrap">2026-10-26</span></td>
+</tr>
 <tr>
 <td>v0.26</td>
 <td>实况窗下方新增<strong>步骤日志</strong>（<code>#slBody</code>）：按组件分行记录「任务 / L0 / L1a / L1b / L2 / 步 / 思考 / 动作 / 完成 / 失败 / 接手 / 轨迹」，标签分色；过滤 Mobilerun banner 与工具调用 XML 噪音，连续重复行去重。</td>
