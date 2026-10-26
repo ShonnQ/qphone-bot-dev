@@ -5,14 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QPhone · 实时过程</title>
 <style>
-  /* 默认暗黑（唔跟系统主题） */
+  /* 默认亮色（2026-10-26 老板指定）；要返暗色：<html data-theme="dark"> 或 body.theme-dark */
   :root{
+    color-scheme: light;
+    --bg:#f4f6fa; --panel:#ffffff; --panel2:#f7f9fc;
+    --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14); --line2:rgba(15,23,42,.06);
+    --acc1:#0369a1; --acc2:#6d28d9; --ok:#047857; --warn:#b45309; --no:#b91c1c;
+    --glow1:rgba(2,132,199,.10); --glow2:rgba(124,58,237,.09);
+    --inset:rgba(15,23,42,.03);
+    /* 亮色下要压过白底嘅线／箭头／热态字 */
+    --hline:rgba(15,23,42,.30); --arrow:rgba(15,23,42,.45); --arrow2:rgba(15,23,42,.26);
+    --hatch:rgba(15,23,42,.18); --bezel:#e7ecf4; --onhot:#0f172a;
+  }
+  html[data-theme="dark"], body.theme-dark{
     color-scheme: dark;
     --bg:#080a0e; --panel:#10141b; --panel2:#0d1117;
     --fg:#eef2f7; --soft:#94a3b8; --line:rgba(255,255,255,.09); --line2:rgba(255,255,255,.05);
     --acc1:#7dd3fc; --acc2:#a78bfa; --ok:#34d399; --warn:#fbbf24; --no:#fb7185;
     --glow1:rgba(125,211,252,.22); --glow2:rgba(167,139,250,.22);
     --inset:rgba(255,255,255,.05);
+    --hline:rgba(255,255,255,.34); --arrow:rgba(255,255,255,.42); --arrow2:rgba(255,255,255,.22);
+    --hatch:rgba(0,0,0,.55); --bezel:#05070a; --onhot:#fff;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -225,7 +238,7 @@
   .track{height:5px;border-radius:2px;background:linear-gradient(90deg, var(--line2), transparent)}
   .track i{border-radius:2px;
     background:
-      repeating-linear-gradient(90deg, transparent 0 7px, rgba(0,0,0,.55) 7px 9px),
+      repeating-linear-gradient(90deg, transparent 0 7px, var(--hatch) 7px 9px),
       linear-gradient(90deg, var(--acc1), var(--acc2));
     box-shadow:0 0 16px -3px var(--acc1)}
   #send{border-radius:5px;letter-spacing:1px}
@@ -284,15 +297,15 @@
   .live-head{display:flex;align-items:center;gap:4.5px;font:7.12px/1.5 ui-monospace,Menlo,monospace;
              letter-spacing:.9px;color:var(--soft);text-transform:uppercase}
   .ldot{width:5px;height:5px;border-radius:50%;background:var(--no)}
-  .ldot.on{background:#34D399;box-shadow:0 0 7px #34D399}
-  .livepanel .phone{position:relative;aspect-ratio:720/1600;cursor:zoom-in;
+  .ldot.on{background:var(--ok);box-shadow:0 0 7px var(--ok)}
+  .livepanel .phone{position:relative;aspect-ratio:9/16;cursor:zoom-in;
          border:1px solid rgba(125,211,252,.32);
-         border-radius:4px;overflow:hidden;background:#05070a}
-  .livepanel .phone img{width:100%;height:100%;object-fit:cover;display:block}
+         border-radius:4px;overflow:hidden;background:var(--bezel)}
+  .livepanel .phone img{width:100%;height:100%;object-fit:contain;display:block}
   .livepanel .off{position:absolute;inset:0;display:none;place-content:center;justify-items:center;gap:5px;
        color:#9fb3c4;font:7.5px/1 ui-monospace,Menlo,monospace;background:rgba(3,6,10,.72);
        text-align:center;padding:0 10px}
-  .livepanel .off b{font-size:8.5px;color:#FBBF24;letter-spacing:.6px}
+  .livepanel .off b{font-size:8.5px;color:var(--warn);letter-spacing:.6px}
   .livepanel .off small{font-size:6.8px;color:#8fa3b6;line-height:1.5}
   .livepanel .off.show{display:grid}
   .live-foot{display:flex;justify-content:space-between;font:6.38px/1.4 ui-monospace,Menlo,monospace;color:var(--soft)}
@@ -348,7 +361,7 @@
     background:var(--panel);
     animation:amberblink 1.1s ease-in-out infinite;
   }
-  .n.hot .txt b{color:#fff}
+  .n.hot .txt b{color:var(--onhot)}
   .n.hot::before{background:#FBBF24;opacity:.85}
   @keyframes amberblink{
     0%,100%{box-shadow:inset 0 0 0 2px rgba(251,191,36,.45)}
@@ -360,9 +373,9 @@
   .macwrap{position:relative;display:flex;align-items:center}
   .mcomms{position:absolute;top:100%;left:50%;transform:none;display:flex;
     flex-direction:column;align-items:center;gap:0;margin-top:3px;z-index:4}
-  .mcomms .cline{width:1px;height:16px;border-left:1px dashed rgba(255,255,255,.34);background:none;position:relative}
+  .mcomms .cline{width:1px;height:16px;border-left:1px dashed var(--hline);background:none;position:relative}
   .mcomms .cline.up:before,.mcomms .cline.down:after{content:"";position:absolute;left:-2.5px;
-    width:6px;height:5px;background:rgba(255,255,255,.42)}
+    width:6px;height:5px;background:var(--arrow)}
   .mcomms .cline.up:before{top:-1px;clip-path:polygon(50% 0,100% 100%,0 100%)}
   .mcomms .cline.down:after{bottom:-1px;clip-path:polygon(50% 100%,100% 0,0 0)}
   .mcomms .tag{position:static;transform:none}
@@ -373,15 +386,15 @@
   .grp.llm .n{padding:6px 9px}
 
   .link{flex:1 1 46px;max-width:none;min-width:26px;height:1px;border:0;border-radius:0;margin:0 3px;
-    background:rgba(255,255,255,.22);position:relative}
+    background:var(--arrow2);position:relative}
   .link::after{content:"";position:absolute;right:-1px;top:-2px;width:4px;height:5px;
-    background:rgba(255,255,255,.32);clip-path:polygon(0 0,100% 50%,0 100%)}
-  .link.dash{background:none;border-top:1px dashed rgba(255,255,255,.26);height:0}
+    background:var(--arrow);clip-path:polygon(0 0,100% 50%,0 100%)}
+  .link.dash{background:none;border-top:1px dashed var(--arrow2);height:0}
   .link.dash::after{top:-3px}
   .link.dash.bi::before{content:"";position:absolute;left:-1px;top:-3px;width:4px;height:5px;
-    background:rgba(255,255,255,.32);clip-path:polygon(100% 0,0 50%,100% 100%)}
+    background:var(--arrow);clip-path:polygon(100% 0,0 50%,100% 100%)}
   .link::before{content:"";position:absolute;left:-3px;top:50%;transform:translateY(-50%);
-    width:4px;height:4px;border-radius:50%;background:#0b1017;border:1px solid rgba(255,255,255,.28)}
+    width:4px;height:4px;border-radius:50%;background:var(--panel);border:1px solid var(--arrow2)}
   .link.on::before{border-color:#FBBF24}
   .link.on{background:#FBBF24;height:2px;box-shadow:0 0 8px -2px rgba(251,191,36,.75)}
   .link.on::after{background:#FBBF24;top:-1.5px}
@@ -389,7 +402,7 @@
   .link.mute{opacity:.28}
 
   .link .tag,.mcomms .tag{font:7px/1 ui-monospace,Menlo,monospace;letter-spacing:.7px;color:#cfd8e3;
-    background:#0b1017;border:1px solid rgba(255,255,255,.13);border-radius:8px;padding:2px 6px;white-space:nowrap}
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:2px 6px;white-space:nowrap}
   .link{display:flex;align-items:center;justify-content:center}
   .link .tag{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
   .link.dash .tag,.mcomms .tag{color:#bfe9ff;border-color:rgba(125,211,252,.30)}
@@ -398,7 +411,7 @@
 
   /* 锚点 */
   .anc{position:absolute;top:50%;width:4px;height:4px;border-radius:50%;background:#0b1017;
-    border:1px solid rgba(255,255,255,.26);transform:translateY(-50%);z-index:2}
+    border:1px solid var(--arrow2);transform:translateY(-50%);z-index:2}
   .anc.l{left:-2.5px}
   .anc.r{right:-2.5px}
   .n.hot .anc{border-color:#FBBF24}
@@ -418,7 +431,7 @@
 
   /* ═════ v1.3 会话气泡（IM 式）═════ */
   .chatwrap{position:relative;display:flex;flex-direction:column;flex:1 1 0;min-height:180px;
-    margin-top:12px;border-top:1px solid rgba(255,255,255,.07)}
+    margin-top:12px;border-top:1px solid var(--line2)}
   .chat-hd{display:flex;align-items:center;gap:7px;padding:8px 2px 7px;flex:0 0 auto}
   .ch-av{width:17px;height:17px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
     background:linear-gradient(140deg,rgba(52,211,153,.34),rgba(52,211,153,.12));border:1px solid rgba(52,211,153,.45)}
@@ -430,7 +443,7 @@
   .ch-dot.off{background:var(--no);box-shadow:0 0 6px var(--no)}
   .ch-more{font:11px/1 ui-monospace,Menlo,monospace;color:var(--soft);margin-left:4px}
   .ch-clear{margin-left:auto;font:7px/1 ui-monospace,Menlo,monospace;letter-spacing:.6px;color:var(--soft);
-    background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;padding:3px 8px;cursor:pointer}
+    background:var(--inset);border:1px solid var(--line);border-radius:999px;padding:3px 8px;cursor:pointer}
   .ch-clear:hover{color:#bfe9ff;border-color:rgba(125,211,252,.34)}
 
   .chat{flex:1 1 0;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:9px;padding:2px 2px 4px}
@@ -438,7 +451,7 @@
   .chat::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
 
   .sys{align-self:center;font:8px/1.5 ui-monospace,Menlo,monospace;letter-spacing:.6px;color:var(--soft);
-    background:rgba(255,255,255,.055);border-radius:999px;padding:3px 8px;text-align:center;max-width:92%}
+    background:var(--inset);border-radius:999px;padding:3px 8px;text-align:center;max-width:92%}
   .sys b{color:#cfd8e3;font-weight:600}
 
   .g{display:flex;flex-direction:column;gap:3px;max-width:100%}
@@ -450,7 +463,7 @@
   .b{max-width:74%;font-size:10.12px;line-height:1.6;padding:7px 10px;border-radius:14px;white-space:pre-wrap;
     word-break:break-word;position:relative}
   .b.me{align-self:flex-end;background:rgba(125,211,252,.17);color:#eaf6ff}
-  .b.bot{align-self:flex-start;background:rgba(255,255,255,.065);color:#eef3f8}
+  .b.bot{align-self:flex-start;background:var(--panel2);border:1px solid var(--line);color:var(--fg)}
   .b.fold{max-height:80px;overflow:hidden}
   .b.fold:after{content:"";position:absolute;left:0;right:0;bottom:0;height:18px;
     background:linear-gradient(transparent,var(--panel))}
@@ -462,7 +475,7 @@
     box-shadow:inset 0 0 0 1px rgba(251,191,36,.32)}
   .task .t-hd{display:flex;align-items:center;gap:5px;font-size:10.12px;font-weight:600}
   .task .t-step{margin-left:auto;font:8px/1.3 ui-monospace,Menlo,monospace;letter-spacing:.6px;color:#e9d9a8}
-  .task .t-bar{height:2px;border-radius:2px;background:rgba(255,255,255,.10);margin:6px 0 5px;overflow:hidden}
+  .task .t-bar{height:2px;border-radius:2px;background:var(--line);margin:6px 0 5px;overflow:hidden}
   .task .t-bar i{display:block;height:100%;width:0;border-radius:2px;transition:width .4s ease;
     background:repeating-linear-gradient(90deg,transparent 0 4px,rgba(0,0,0,.5) 4px 6px),linear-gradient(90deg,#FBBF24,#f59e0b)}
   .task .t-dt{font-size:9px;color:#cfd8e3;line-height:1.5}
@@ -491,12 +504,12 @@
   /* 输入栏：+ / 输入 / 🎙 / 圆形发送 */
   footer{display:flex;align-items:center;gap:6px}
   #plus,#mic{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
-    font:12px/1 ui-monospace,Menlo,monospace;color:var(--soft);background:rgba(255,255,255,.06);
+    font:12px/1 ui-monospace,Menlo,monospace;color:var(--soft);background:var(--inset);
     border:1px solid var(--line);cursor:pointer;padding:0}
   #mic{font-size:10px}
   #input{flex:1;height:32px;min-height:32px;max-height:96px;border-radius:999px;padding:8px 11px;
     font-size:9.5px;line-height:1.4;resize:none;overflow-y:auto;
-    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:var(--fg)}
+    background:var(--inset);border:1px solid var(--line);color:var(--fg)}
   #input:focus{outline:none;border-color:rgba(125,211,252,.45)}
   #send{width:26px;height:26px;min-width:26px;border-radius:50%;border:0;display:grid;place-items:center;
     cursor:pointer;background:linear-gradient(140deg,#ef4444,#b91c1c);box-shadow:0 4px 12px -6px #dc2626;padding:0}
@@ -597,12 +610,12 @@
   </div>
   <div class="track"><i id="prog"></i></div>
   <div class="detail" id="detail"></div>
-  <div class="tele"><span>qph-0.8</span><span>mac :8777</span><span>adb :10532</span><span id="teleModel">grok-4.7</span></div>
+  <div class="tele"><span>qph-0.8</span><span>mac :8777</span><span id="teleAdb">adb :—</span><span id="teleModel">grok-4.7</span></div>
 
   <section class="chatwrap">
     <div class="chat-hd">
       <span class="ch-av"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></span>
-      <div class="ch-id"><b>云机 · QPhone</b><small id="chatSub">ANDROID 13 · 10532</small></div>
+      <div class="ch-id"><b>云机 · QPhone</b><small id="chatSub">ANDROID 13 · —</small></div>
       <i class="ch-dot" id="chDot"></i>
       <button class="ch-clear" id="chHome" title="叫云机返桌面">返桌面</button>
       <button class="ch-clear" id="chClear" title="清空会话">清空</button>
@@ -620,7 +633,7 @@
     <img id="liveImg" alt="云机画面">
     <div class="off" id="liveOff"><b>云机离线</b><small id="liveOffSub">画面系旧帧</small></div>
   </div>
-  <div class="live-foot"><span id="liveAge">—</span><span>720×1600</span></div>
+  <div class="live-foot"><span id="liveAge">—</span><span id="liveSize">—</span></div>
 </aside>
 
 </div><!-- /layout -->
@@ -717,6 +730,11 @@ async function refreshStatus(){
     if(at) at.textContent = "ADB ⇄ " + (local ? "本地模拟器" : (lan ? "tcp " + tgt.split(":")[1] : (tgt || "—")));
     const dt = $("devTag");
     if(dt) dt.textContent = (local ? "本地模拟器" : "云机") + " · Android " + (s.sdk === "33" ? "13" : (s.sdk || "?"));
+    // 底部遥测同会话头嘅端口一律跟 target 变，唔准写死（旧版写 10532）
+    const port = lan ? tgt.split(":")[1] : (local ? "模拟器" : "—");
+    const ta = $("teleAdb"); if(ta) ta.textContent = "adb :" + port;
+    const cs = $("chatSub");
+    if(cs) cs.textContent = "ANDROID " + (s.sdk === "33" ? "13" : (s.sdk || "?")) + " · " + port;
   }catch(e){ dot.className="off"; meta.textContent="服务未跑"; }
 }
 refreshStatus(); setInterval(refreshStatus, 8000);
@@ -1011,6 +1029,7 @@ async function refreshLive(force){
     if(liveURL) URL.revokeObjectURL(liveURL);
     liveURL = url; liveImg.src = url;
     $("liveRes").textContent = probe.naturalWidth + "×" + probe.naturalHeight;
+    const ls = $("liveSize"); if(ls) ls.textContent = probe.naturalWidth + "×" + probe.naturalHeight;
     // 帧龄：>6s 视为旧帧（云机可能断线，因为落盘缓存仲画得出嘢）
     const age = parseFloat(r.headers.get("X-Frame-Age") || "0");
     const ageEl = $("liveAge");

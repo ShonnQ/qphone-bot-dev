@@ -17,7 +17,7 @@
 零第三方依赖，Python 3.9+。环境变量：
     QPHONE_BIND      监听地址（默认 127.0.0.1，绑 0.0.0.0 才给容器访问）
     QPHONE_PORT      端口（默认 8777）
-    QPHONE_TARGET    云机 adb 地址（默认 127.0.0.1:5555）
+    QPHONE_TARGET    云机 adb 地址（默认 localhost:5556 = 本地 redroid 13 容器）
     MOBILERUN        mobilerun 可执行路径（默认自动找）
     QPHONE_MODEL     模型（默认 workbuddy/deepseek-v4.1-flash）
     QPHONE_LLM_URL   OpenAI 兼容端点（默认 http://127.0.0.1:7863/v1）
@@ -43,7 +43,7 @@ from urllib.parse import parse_qs, urlparse
 HERE = Path(__file__).resolve().parent
 BIND = os.environ.get("QPHONE_BIND", "127.0.0.1")
 PORT = int(os.environ.get("QPHONE_PORT", "8777"))
-TARGET = os.environ.get("QPHONE_TARGET", "127.0.0.1:5555")
+TARGET = os.environ.get("QPHONE_TARGET", "localhost:5556")
 HOME_AFTER = os.environ.get("QPHONE_HOME_AFTER", "1").lower() not in ("0", "false", "no", "off")
 ADB = os.environ.get("QPHONE_ADB", os.path.expanduser("~/Library/Android/sdk/platform-tools/adb"))
 MODEL = os.environ.get("QPHONE_MODEL", "grok-4.7")

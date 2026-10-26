@@ -17,7 +17,7 @@
 
 环境变量：
     QPHONE_ADB         adb 可执行路径（默认自动找）
-    QPHONE_TARGET      云机地址（默认 127.0.0.1:5555）
+    QPHONE_TARGET      云机地址（默认 localhost:5556 = 本地 redroid 13 容器）
     QPHONE_CONTAINER   redroid 容器名（默认自动找第一个 redroid 容器）
 
 退出码：0 做成；1 失败（stderr 讲原因）；2 用法错。
@@ -34,7 +34,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-TARGET = os.environ.get("QPHONE_TARGET", "127.0.0.1:5555")
+TARGET = os.environ.get("QPHONE_TARGET", "localhost:5556")
 CONTAINER_HINT = os.environ.get("QPHONE_CONTAINER", "")
 
 ADB_CANDIDATES = [
@@ -89,7 +89,8 @@ def listed_devices() -> list[str]:
 
 
 def connect() -> None:
-    # 本地模拟器（emulator-5554）本来就已经挂喺 adb devices，唔使 adb connect
+    # 已在 adb devices 里嘅设备（例如旧版直连嘅 emulator-*）唔使再 connect，
+    # 硬拼端口会造出「<serial>:5555 offline」重复条目，之后所有 adb -s 都报 more than one device
     if TARGET.startswith("emulator-") or TARGET in listed_devices():
         return
     cp = run([adb_path(), "connect", TARGET], timeout=20)
