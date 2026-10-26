@@ -982,6 +982,26 @@ def frame_worker() -> None:
         FRAME_EVT.clear()
 
 
+# ── 执行层触发条件（/layers 对外，畀人核对「点解走呢层」）
+LAYERS_DOC = {
+    "order": ["L0", "L1a", "L1b", "L2"],
+    "rules": {
+        "L0": {"触发": "正则命中能力表（打开/关/查有无装/下载安装查重/音量/亮度/开关/截图/点坐标/滑动/ASCII 输入/查前台…）",
+               "执行": "adb shell 直连：am start -W -n / input keyevent / settings put / pm list packages",
+               "断言": "topResumedActivity 变到目标包、settings get 读回一致、pm list 有命中"},
+        "L1a": {"触发": "正则「动词 + 1~12 字目标」，动词表 = 点击|点开|点|按下|按|选择|选|打开|进入|查找|找|搜|搜索|查看|睇|看|填|输入|tap|click",
+                "执行": "agent-device snapshot -i → label/identifier 精确→包含→去空格→中英映射命中控件 → input tap 控件中心",
+                "断言": "前台包变咗或快照 hash 变咗；搵唔到控件即 miss（why=无障碍树冇呢个控件）"},
+        "L1b": {"触发": "同时满足：① 句子里有「动词+目标」② /proc/net/unix 有 @webview_devtools_remote_<pid>",
+                "执行": "adb forward → GET /json 取 page → WebSocket Runtime.evaluate 找文字元素 .click() / 填值",
+                "断言": "JS 返回 ok:true；冇 socket 即 miss（why=冇 WebView 调试 socket）"},
+        "L2": {"触发": "上面三层全部 miss",
+               "执行": "mobilerun run（截图 + 多模态模型），--steps 20",
+               "断言": "Mobilerun 自己判；失败出「要人」"},
+    },
+}
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "qphone-turn/0.1"
@@ -1093,6 +1113,14 @@ class Handler(BaseHTTPRequestHandler):
                                     "model": MODEL, "of": int(STEPS)})
         if path == "/health":
             return self._send_json({"ok": True, "target": TARGET, "model": MODEL, "provider": PROVIDER})
+        if path == "/layers":
+            d = dict(LAYERS_DOC)
+            d["last_attempts"] = getattr(layers, "LAST_ATTEMPTS", [])
+            try:
+                d["webview_sockets"] = layers.webview_sockets()
+            except Exception:                              # noqa: BLE001
+                d["webview_sockets"] = []
+            return self._send_json(d)
         if path == "/status":
             return self._send_json(qphone_status())
         self._send_json({"ok": False, "error": "唔识呢条路径"}, 404)

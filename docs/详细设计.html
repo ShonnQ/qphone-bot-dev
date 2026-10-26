@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.18</title>
+<title>QPhone 详细设计说明书 v0.19</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -47,10 +47,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.18</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.19</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.18</p>
+<p>版本：v0.19</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -65,6 +65,12 @@ strong{font-weight:700}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.19</td>
+<td>修包名错判（应用宝 <code>com.tencent.android.qqdownloader</code>、印象笔记 <code>com.yinxiang</code>，原写 <code>com.evernote</code> 会误报「未安装」）；新增「去<app>做X」前缀执行；L1b 改为只认前台 App 嘅 WebView socket；新增 <code>GET /layers</code> 公开各层触发条件。</td>
+<td>C</td>
+<td><span class="nowrap">2026-10-26</span></td>
+</tr>
 <tr>
 <td>v0.18</td>
 <td>修三个实操 bug：①亮色主题「我」气泡字近白睇唔到 → 改深字 + 浅蓝底；②每单步骤唔清零 → 服务端 <code>turn</code> 与壳 <code>taskStart()</code> 双向归零；③执行层覆盖太窄导致成日落 L2 → L0 加「查有冇装 X」与更多打开讲法、L1a 动词表扩阔、未安装改「确定结论」直返，落 L2 时讲清每层原因。</td>
@@ -1097,6 +1103,50 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tbody>
 </table>
 <p>另加常见第三方 app 别名表（印象笔记 / 微信 / 抖音 / 小红书 …），令「有无装 X」「打开 X」对得上包名；表外又唔喺机上嘅名，一律当唔识，唔乱猜。</p>
+<h4>3.4.13 触发条件公示（<code>GET /layers</code>）</h4>
+<p>「点解走呢层」唔靠估，接口直接列条件；<code>last_attempts</code> 回报上一单每层结果。</p>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>触发条件（全部要满足）</th>
+<th>执行</th>
+<th>断言</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L0</td>
+<td>正则命中能力表（打开/关/查有无装/下载安装查重/音量/亮度/开关/截图/点坐标/滑动/ASCII/查前台）</td>
+<td><code>adb shell</code> 直连</td>
+<td><code>topResumedActivity</code> / <code>settings get</code> / <code>pm list</code> 读回</td>
+</tr>
+<tr>
+<td>L1a</td>
+<td 点击_点开_点_按下_按_选择_选_打开_进入_查找_找_搜_搜索_查看_睇_看_填_输入_tap_click="点击,点开,点,按下,按,选择,选,打开,进入,查找,找,搜,搜索,查看,睇,看,填,输入,tap,click">① 正则「动词 + 1~12 字目标」② 动词 ∈</td>
+<td><code>agent-device snapshot -i</code> → 命中控件 → <code>input tap</code> 中心</td>
+<td>前台包变 或 快照 hash 变</td>
+</tr>
+<tr>
+<td>L1b</td>
+<td>① 同上「动词+目标」② <code>/proc/net/unix</code> 有 <strong>前台 App</strong> 嘅 <code>@webview_devtools_remote_&lt;pid&gt;</code></td>
+<td><code>adb forward</code> → <code>/json</code> → WebSocket <code>Runtime.evaluate</code></td>
+<td>JS 返回 <code>ok:true</code></td>
+</tr>
+<tr>
+<td>L2</td>
+<td>上面全 miss</td>
+<td><code>mobilerun run</code></td>
+<td>Mobilerun 自判</td>
+</tr>
+</tbody>
+</table>
+<p>两条容易踩错嘅点，已修：</p>
+<ol>
+<li><strong>L1b 拣错 socket</strong>：机身可能同时有几个 WebView 调试 socket（应用宝、WebView shell 各自一个）。原本取第一个，会点错 App。改为先 <code>pidof &lt;前台包&gt;</code>，只认尾巴 pid 对得上嘅 socket。</li>
+<li><strong>包名别名写错</strong>：印象笔记国行包名系 <code>com.yinxiang</code>（唔系 <code>com.evernote</code>），应用宝系 <code>com.tencent.android.qqdownloader</code>。别名错会令「有无装 X」误答「未安装」——所以搵唔到别名时改为列出机上第三方 app，唔好一口咬定冇装。</li>
+</ol>
+<p>另加「去<app>做X」前缀：先开 App，再把剩余意图跑第二轮（例如「去应用宝下载快手」= 开应用宝 + 再判「下载快手」）。</p>
 <h2>4. 用户界面详细设计</h2>
 <h3>4.1 界面结构</h3>
 <p>主界面是壳里的对话。本文不重画这个界面。</p>

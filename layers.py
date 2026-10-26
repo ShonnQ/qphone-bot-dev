@@ -87,7 +87,9 @@ APP_ALIASES = {
 
 # 常见第三方 app（包名固定，查有无装好准；唔喺表、又唔喺机上一律当「唔识」）
 APP_EXTRA = {
-    "印象笔记": "com.evernote", "evernote": "com.evernote",
+    "印象笔记": "com.yinxiang", "evernote": "com.evernote",     # 国行包名系 com.yinxiang
+    "应用宝": "com.tencent.android.qqdownloader", "腾讯应用宝": "com.tencent.android.qqdownloader",
+    "qqdownload": "com.tencent.android.qqdownloader",
     "微信": "com.tencent.mm", "wechat": "com.tencent.mm",
     "企业微信": "com.tencent.wework", "qq": "com.tencent.mobileqq",
     "支付宝": "com.eg.android.AlipayGphone", "淘宝": "com.taobao.taobao",
@@ -102,6 +104,11 @@ APP_EXTRA = {
 APP_ALIASES.update(APP_EXTRA)
 
 _INSTALLED = {"at": 0.0, "pkgs": set()}
+
+
+def third_party() -> list:
+    """已装第三方 app（-3）。"""
+    return sorted(l.split(":", 1)[-1].strip() for l in sh("pm list packages -3").splitlines() if ":" in l)
 
 
 def installed(force: bool = False) -> set:
@@ -207,19 +214,48 @@ def l0_try(text: str) -> dict | None:
         hit = [p for p in installed() if name.lower() and name.lower() in p.lower()]
         if hit:
             return trace("L0", f"查有冇装 {name}", ["pm list packages"], t0, True, f"有装：{hit[0]}")
+        third = third_party()
+        return trace("L0", f"查有冇装 {name}", ["pm list packages -3"], t0, True,
+                     f"包表冇同名词条；机上第三方 app 有 {len(third)} 个：" + "、".join(third[:6]))
 
     # 1) 打开 app
     m = re.match(r"^(?:打开|开|启动|开启|进入|去|用|睇|看|run|open|launch)\s*(?:个|一?下)?\s*(.+?)(?:app|应用|应用程式)?$", t, re.I)
     if m:
         name = m.group(1).strip()
-        pkg = resolve_package(name)
+        # 「去<app>做X」：先用最长别名前缀拆出 app 名 + 剩余意图
+        pkg, rest = "", ""
+        for k in sorted(APP_ALIASES, key=len, reverse=True):
+            if name == k:
+                pkg, rest = APP_ALIASES[k], ""
+                break
+            if name.startswith(k) and len(name) > len(k):
+                pkg = APP_ALIASES[k]
+                rest = name[len(k):].lstrip("下 ").strip()
+                name = k
+                break
+        if not pkg:
+            pkg = resolve_package(name)
         if pkg and pkg not in installed():
             tr = trace("L0", f"打开 {name}", [f"pm list packages {pkg}"], t0, False, f"未安装 {pkg}")
             tr["final"] = True          # 确定结论：唔需要再试 L1/L2
             return tr
         if pkg:
             ok, why, cmd = open_app(pkg)
-            return trace("L0", f"打开 {name}", [cmd], t0, ok, why or pkg)
+            tr = trace("L0", f"打开 {name}", [cmd], t0, ok, why or pkg)
+            if ok and rest and len(rest) >= 2:
+                tr["continue"] = rest            # 先开 app，剩余意图交下一轮
+            return tr
+
+    # 1c) 下载 / 安装 X：已装就直答唔使再装（唔好白开应用宝）
+    m = re.search(r"(?:下载|安装|装)\s*(?:一个|个)?\s*([^\s，。？！]{1,14})", t)
+    if m:
+        name = re.sub(r"(app|应用|应用程式|程式)$", "", m.group(1).strip(), flags=re.I)
+        pkg = resolve_package(name)
+        if pkg and pkg in installed():
+            tr = trace("L0", f"{name} 已装", [f"pm list packages {pkg}"], t0, True,
+                       f"已经装咗：{pkg}，唔使再下载")
+            tr["final"] = True
+            return tr
 
     # 2) 桌面 / 返回
     if re.search(r"(回|返|去).{0,3}(桌面|主页|首页|home)", t, re.I):
@@ -558,9 +594,23 @@ class _WS:
 _CDP = {"port": 0, "sock": "", "ws": None, "tid": ""}
 
 
+def fg_webview_sockets() -> list[str]:
+    """只留前台 app 嘅 WebView socket（socket 名尾巴就系 app 嘅 pid）。"""
+    socks = webview_sockets()
+    if not socks:
+        return []
+    pkg = fg_package()
+    try:
+        pids = sh(f"pidof {pkg}").split() if pkg else []
+    except Exception:                                     # noqa: BLE001
+        pids = []
+    mine = [s for s in socks if s.rsplit("_", 1)[-1] in pids]
+    return mine or socks
+
+
 def cdp_targets() -> list[dict]:
     """起 adb forward + 拉 /json 目标表。冇 WebView 就返空。"""
-    socks = webview_sockets()
+    socks = fg_webview_sockets()
     if not socks:
         return []
     sock = socks[0]
@@ -635,10 +685,11 @@ def l1b_try(text: str) -> dict | None:
     if m:
         target = m.group(1)
         r = cdp_eval(CLICK_JS % json.dumps(target.lower(), ensure_ascii=False))
-        ok = bool(r.get("ok") and (r.get("value") or {}).get("ok"))
         val = r.get("value") or {}
-        return trace("L1b", f"网页点「{target}」", ["CDP Runtime.evaluate click"], t0, ok,
-                     (f"{val.get('tag')} {val.get('text','')}".strip() or r.get("error", ""))[:80])
+        ok = bool(r.get("ok") and isinstance(val, dict) and val.get("ok"))
+        why = (f"{val.get('tag')} {val.get('text','')}".strip()
+               or val.get("reason") or r.get("error") or "页面搵唔到呢个文字")
+        return trace("L1b", f"网页点「{target}」", ["CDP Runtime.evaluate click"], t0, ok, why[:80])
     m = re.search(r"(?:输入|填写|打)\s*[「『\"“']?([^」』\"”']{1,60})[」』\"”']?\s*(?:落|入|去|到)", t)
     if m:
         val = m.group(1)
@@ -654,7 +705,29 @@ LAST_ATTEMPTS: list[dict] = []
 
 
 def route(text: str, emit=None) -> dict | None:
-    """逐层试；成功就返该层 trace，全部唔得返 None（调用方转 L2）。"""
+    """逐层试；成功就返该层 trace，全部唔得返 None（调用方转 L2）。
+
+    特殊：L0 若只做到「打开 <app>」而句子仲有剩余意图（例如「去应用宝下载快手」），
+    会带 continue 字段再跑一轮，令后面嘅 L1a/L1b/L2 从已经开好嘅界面上继续。
+    """
+    chain = [("L0", l0_try), ("L1a", l1a_try), ("L1b", l1b_try)]
+    LAST_ATTEMPTS.clear()
+    note = ""
+    for _ in range(2):                                  # 最多两轮（前缀 + 实质）
+        tr = _route_once(text, chain, emit)
+        if tr and tr.get("continue"):
+            note = (note + "；" if note else "") + tr["label"]
+            text = tr["continue"]
+            if not text:
+                return tr
+            continue
+        if tr and note:
+            tr["note"] = note
+        return tr
+    return None
+
+
+def _route_once(text: str, chain, emit):
     def fire(tr: dict) -> None:
         if emit:
             try:
@@ -664,8 +737,6 @@ def route(text: str, emit=None) -> dict | None:
             except Exception:                              # noqa: BLE001
                 pass
 
-    chain = [("L0", l0_try), ("L1a", l1a_try), ("L1b", l1b_try)]
-    LAST_ATTEMPTS.clear()
     last = None
     for name, fn in chain:
         t0 = time.time()
@@ -688,6 +759,8 @@ def route(text: str, emit=None) -> dict | None:
             continue
         fire(tr)
         LAST_ATTEMPTS.append({"layer": name, "ok": bool(tr.get("ok")), "why": tr.get("why", "")})
+        if tr.get("continue"):
+            return tr
         if tr.get("ok") or tr.get("final"):
             return tr
         last = tr
