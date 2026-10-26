@@ -11,11 +11,15 @@
 #      唔会自动出 /dev/binder，要 mount -t binder binder /dev/binderfs
 #   3) binderfs 节点默认 600 → 容器内服务开 /dev/binder 得 Permission denied，要 chmod 666
 #   4) 节点要用 -v 绑入容器：用 --device 会变 ENXIO
+#   5) /data 一定要放 VM 自己嘅 ext4（Docker 命名卷），唔可以挂宿主目录：
+#      宿主目录经 colima 嘅 virtiofs，Android vold 做唔到 ext4 project quota，
+#      StorageManager 会一路报 "Inappropriate ioctl for device" / 存储有问题
 set -uo pipefail
 
 NAME="${REDROID_NAME:-qphone-redroid}"
 PORT="${REDROID_PORT:-5556}"   # 5555 默认留给 AVD 模拟器，撞端口
-DATA="${REDROID_DATA:-$HOME/redroid13-data}"
+DATA_VOLUME="${REDROID_DATA_VOLUME:-qphone-data}"   # 命名卷：数据落 VM 嘅 ext4
+DATA_DIR="${REDROID_DATA:-}"                        # 有值就改用宿主目录（会经 virtiofs，Android 会报存储问题）
 IMAGE="${REDROID_IMAGE:-redroid/redroid:13.0.0_64only-latest}"
 WIDTH="${REDROID_WIDTH:-720}"
 HEIGHT="${REDROID_HEIGHT:-1280}"
@@ -69,14 +73,22 @@ esac
 ensure_binder
 
 say "2/4 起容器 ${IMAGE}（${WIDTH}x${HEIGHT} dpi${DPI}）"
-mkdir -p "$DATA"
+if [ -n "$DATA_DIR" ]; then
+  echo "  ⚠ 用宿主目录 ${DATA_DIR}（经 virtiofs，Android 会报存储问题；只作调试）"
+  mkdir -p "$DATA_DIR"
+  DATA_ARG="$DATA_DIR:/data"
+else
+  docker volume create "$DATA_VOLUME" >/dev/null 2>&1 || true
+  echo "  /data → Docker 卷 ${DATA_VOLUME}（VM 内 ext4）"
+  DATA_ARG="$DATA_VOLUME:/data"
+fi
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d --privileged --platform linux/arm64 \
   -v /dev/binderfs:/dev/binderfs \
   -v /dev/binderfs/binder:/dev/binder \
   -v /dev/binderfs/hwbinder:/dev/hwbinder \
   -v /dev/binderfs/vndbinder:/dev/vndbinder \
-  -v "$DATA:/data" \
+  -v "$DATA_ARG" \
   -p "$PORT:5555" \
   --name "$NAME" \
   "$IMAGE" \
@@ -104,6 +116,12 @@ MODEL="$("$ADB" -s "localhost:$PORT" shell getprop ro.product.model 2>/dev/null 
 echo "  设备型号：${MODEL}"
 [ "$MODEL" = "sdk_gphone64_arm64" ] && die "localhost:${PORT} 其实系 AVD 模拟器，换 REDROID_PORT 再试"
 "$ADB" -s "localhost:$PORT" shell "getprop ro.build.version.release; getprop ro.build.version.sdk; getprop ro.product.cpu.abi" | tr -d '\r'
+DFS="$("$ADB" -s "localhost:$PORT" shell "mount | grep -m1 ' /data '" 2>/dev/null | tr -d '\r')"
+echo "  /data：${DFS:-未知}"
+case "$DFS" in
+  *ext4*|*f2fs*) ;;
+  *) echo "  ⚠ /data 唔系 ext4/f2fs（多数系 virtiofs），Android 会报存储问题 —— 参考脚本头第 5 条" ;;
+esac
 echo
 echo "起好。指向它："
 echo "  QPHONE_TARGET=localhost:$PORT python3 serve.py"
