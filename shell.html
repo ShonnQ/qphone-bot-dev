@@ -35,6 +35,7 @@
       radial-gradient(1100px 380px at 12% -12%, var(--glow2), transparent 62%),
       radial-gradient(900px 320px at 88% -18%, var(--glow1), transparent 60%),
       var(--bg);
+    padding-bottom:26px;                     /* 留位畀窗口底部状态栏 */
     font:12.0px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
     -webkit-font-smoothing:antialiased;
   }
@@ -152,9 +153,9 @@
   .n.xs.miss{opacity:.5}
   .n.xs.miss b{text-decoration:line-through;text-decoration-thickness:1px}
   .n.xs.ok{border-color:var(--ok)}
-  /* 结果下方：执行层调用占比（按单计，每单只用一层） */
-  .lstat{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:8px;padding-top:7px;
-         border-top:1px dashed var(--line);font-size:9px;color:var(--soft)}
+  /* 状态条 Step 层下方：执行层调用占比（按单计，每单只用一层） */
+  .lstat{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:6px;font-size:9px;color:var(--soft)}
+  .lstat:empty{display:none}
   .lstat .k{font-weight:700;color:var(--fg);letter-spacing:.2px}
   .lstat .it{display:flex;align-items:center;gap:4px;font-variant-numeric:tabular-nums}
   .lstat .bar{display:inline-block;width:44px;height:4px;border-radius:2px;background:var(--line);overflow:hidden}
@@ -271,7 +272,10 @@
   .chip{border-radius:4px;letter-spacing:.6px}
   .mark{border-radius:5px}
 
-  .tele{margin-top:10px;display:flex;justify-content:flex-end;gap:10px;
+  /* 窗口底部固定栏：qph / mac / adb / model */
+  .tele{position:fixed;left:0;right:0;bottom:0;z-index:90;margin:0;padding:6px 20px 7px;
+        display:flex;justify-content:space-between;align-items:center;gap:10px;
+        border-top:1px solid var(--line2);background:var(--bg);
         font:7.12px/1 ui-monospace,Menlo,monospace;letter-spacing:0.83px;
         color:var(--soft);text-transform:uppercase}
   .tele span:before{content:"·";margin-right:9px;opacity:.45}
@@ -292,7 +296,6 @@
   .mdl .grp.remote{background:linear-gradient(180deg,var(--inset),transparent)}
   .mdl .grp.remote>.gtag{color:var(--soft);border-color:var(--line)}
 
-  .tele{justify-content:space-between;align-items:center;border-top:1px solid var(--line2);padding-top:8px}
   .tele:after{content:"▌";color:var(--acc1);animation:blink 1.15s steps(1) infinite;margin-left:6px}
   @keyframes blink{50%{opacity:0}}
   #stepChip{display:none}
@@ -663,8 +666,8 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
     <span class="pct" id="pct"></span>
   </div>
   <div class="track"><i id="prog"></i></div>
+  <div class="lstat" id="lstat"></div>
   <div class="detail" id="detail"></div>
-  <div class="tele"><span>qph-0.8</span><span>mac :8777</span><span id="teleAdb">adb :—</span><span id="teleModel">grok-4.7</span></div>
 
   <section class="chatwrap">
     <div class="chat-hd">
@@ -990,7 +993,8 @@ function layerStats(stats, total, used){
                  + '<span>' + p + '% · ' + c + '</span>';
     box.append(it);
   });
-  (lastTaskCardEl || chatEl).append(box);
+  const host = $("lstat");
+  if(host){ host.replaceChildren(...box.childNodes); }
   scrollDown();
 }
 function taskUpdate(st){
@@ -1107,6 +1111,7 @@ $("chClear").addEventListener("click", async () => {
   try{
     await fetch("/history/clear", {method:"POST"});
     chatEl.innerHTML = ""; lastSide = null; taskCard = null; lastTaskCardEl = null; typingWrap = null;
+    const ls = $("lstat"); if(ls) ls.textContent = "";
     chip("会话已清空"); paint({phase:"idle"});
   }catch(e){ chip("清空失败：" + e); }
 });
@@ -1431,5 +1436,9 @@ setTimeout(() => { refreshLive(true); startStream();
 document.addEventListener("visibilitychange", () => { if(!document.hidden) refreshLive(true); });
 
 </script>
+
+<footer class="tele" id="tele">
+  <span>qph-0.8</span><span>mac :8777</span><span id="teleAdb">adb :—</span><span id="teleModel">grok-4.7</span>
+</footer>
 </body>
 </html>
