@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.21</title>
+<title>QPhone 详细设计说明书 v0.22</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -51,10 +51,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.21</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.22</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.21</p>
+<p>版本：v0.22</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -209,6 +209,12 @@ strong{font-weight:700}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.22</td>
+<td>修流程图连线箭头跟线对唔齐：删走两条旧规则（<code>#l1:after</code> 浮字、<code>.link.on:after</code> 跑马灯圆点，两者都抢同一个 <code>::after</code>），虚线由 <code>border-top</code> 改 <code>repeating-linear-gradient</code>，箭头统一 <code>top:50% + translateY(-50%)</code> 锚在 2 px 线中线。</td>
+<td>C</td>
+<td><span class="nowrap">2026-10-26</span></td>
+</tr>
 <tr>
 <td>v0.21</td>
 <td>执行层命中有强调动画（复用 <code>amberblink</code>：内嵌 2px 实黄、1.1 s、2 次，一单每层只闪一次）；结果卡下方新增「执行层占比」（会话级累计，按单计，最大余数法取整到 100%）；修亮色主题下完成卡结果行与步数行字色对比不足。</td>

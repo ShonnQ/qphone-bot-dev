@@ -35,7 +35,6 @@
       radial-gradient(1100px 380px at 12% -12%, var(--glow2), transparent 62%),
       radial-gradient(900px 320px at 88% -18%, var(--glow1), transparent 60%),
       var(--bg);
-    padding-bottom:26px;                     /* 留位畀窗口底部状态栏 */
     font:12.0px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
     -webkit-font-smoothing:antialiased;
   }
@@ -123,17 +122,11 @@
   .hop{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
        gap:5px;padding:0 12px}
   #l1{flex:1 1 40px;min-width:20px;max-width:none;position:relative}
-  #l1:after{content:"交代 · PROMPT";position:absolute;left:50%;top:-1px;transform:translate(-50%,-50%);
-            font:6.0px/1 ui-monospace,Menlo,monospace;letter-spacing:.6.75px;color:var(--soft);
-            background:var(--panel);padding:2px 6px;white-space:nowrap}
   .hop em{font:7.5px/1 ui-monospace,Menlo,monospace;color:var(--soft);font-style:normal;
           letter-spacing:.8px;text-transform:uppercase}
 
   .link{flex:1 1 40px;max-width:none;min-width:20px;height:1px;background:var(--line);position:relative;margin:0}
   .link.on{background:linear-gradient(90deg,var(--acc1),var(--acc2));height:2px;border-radius:2px}
-  .link.on:after{content:"";position:absolute;top:-2px;left:0;width:5px;height:5px;border-radius:50%;
-    background:var(--acc1);box-shadow:0 0 8px var(--acc1);animation:run 1.2s linear infinite}
-  @keyframes run{0%{left:0;opacity:0}12%{opacity:1}88%{opacity:1}100%{left:100%;opacity:0}}
 
   .mdl{display:flex;flex-direction:column;align-items:flex-start;gap:7px;margin-top:12px}
   .mdl .n{padding:7px 11px}
@@ -272,10 +265,9 @@
   .chip{border-radius:4px;letter-spacing:.6px}
   .mark{border-radius:5px}
 
-  /* 窗口底部固定栏：qph / mac / adb / model */
-  .tele{position:fixed;left:0;right:0;bottom:0;z-index:90;margin:0;padding:6px 20px 7px;
+  /* 输入区底部一行：qph / mac / adb / model（跟输入框同一个底部区） */
+  .tele{margin:0;padding-top:5px;border-top:1px solid var(--line2);
         display:flex;justify-content:space-between;align-items:center;gap:10px;
-        border-top:1px solid var(--line2);background:var(--bg);
         font:7.12px/1 ui-monospace,Menlo,monospace;letter-spacing:0.83px;
         color:var(--soft);text-transform:uppercase}
   .tele span:before{content:"·";margin-right:9px;opacity:.45}
@@ -416,20 +408,25 @@
   .grp.llm>.gtag{color:var(--acc2,#a78bfa)}
   .grp.llm .n{padding:6px 9px}
 
-  .link{flex:1 1 46px;max-width:none;min-width:26px;height:1px;border:0;border-radius:0;margin:0 3px;
+  /* 线一律 2px 高、虚线用 repeating-linear-gradient（唔用 border，
+     否则 border 画喺盒子外面，同 ::after 箭头嘅 top 对唔上） */
+  .link{flex:1 1 46px;max-width:none;min-width:26px;height:2px;border:0;border-radius:0;margin:0 3px;
     background:var(--arrow2);position:relative}
-  .link::after{content:"";position:absolute;right:-1px;top:-2px;width:4px;height:5px;
-    background:var(--arrow);clip-path:polygon(0 0,100% 50%,0 100%)}
-  .link.dash{background:none;border-top:1px dashed var(--arrow2);height:0}
-  .link.dash::after{top:-3px}
-  .link.dash.bi::before{content:"";position:absolute;left:-1px;top:-3px;width:4px;height:5px;
-    background:var(--arrow);clip-path:polygon(100% 0,0 50%,100% 100%)}
+  .link::after{content:"";position:absolute;right:-1px;top:50%;transform:translateY(-50%);
+    width:4px;height:5px;background:var(--arrow);clip-path:polygon(0 0,100% 50%,0 100%)}
+  .link.dash{height:2px;border:0;
+    background:repeating-linear-gradient(90deg,var(--arrow2) 0 5px,transparent 5px 9px)}
+  .link.dash::after{top:50%}
+  .link.dash.bi::before{content:"";position:absolute;left:-1px;top:50%;transform:translateY(-50%);
+    width:4px;height:5px;background:var(--arrow);clip-path:polygon(100% 0,0 50%,100% 100%)}
   .link::before{content:"";position:absolute;left:-3px;top:50%;transform:translateY(-50%);
     width:4px;height:4px;border-radius:50%;background:var(--panel);border:1px solid var(--arrow2)}
   .link.on::before{border-color:#FBBF24}
   .link.on{background:#FBBF24;height:2px;box-shadow:0 0 8px -2px rgba(251,191,36,.75)}
-  .link.on::after{background:#FBBF24;top:-1.5px}
-  .link.dash.on{background:none;border-top:2px dashed #FBBF24;height:0;box-shadow:none}
+  .link.on::after{background:#FBBF24;top:50%}
+  .link.dash.on{height:2px;border:0;box-shadow:none;
+    background:repeating-linear-gradient(90deg,#FBBF24 0 5px,transparent 5px 9px)}
+  .link.dash.on::after{top:50%}
   .link.mute{opacity:.28}
 
   .link .tag,.mcomms .tag{font:7px/1 ui-monospace,Menlo,monospace;letter-spacing:.7px;color:#cfd8e3;
@@ -438,7 +435,7 @@
   .link .tag{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
   .link.dash .tag,.mcomms .tag{color:#bfe9ff;border-color:rgba(125,211,252,.30)}
   .link.on .tag{color:#161104;background:#FBBF24;border-color:#FBBF24;font-weight:600}
-  #l1::after{content:none}           /* 取消旧「交代 · PROMPT」浮字 */
+  /* #l1 直接复用 .link 规则；旧浮字 / 跑马灯圆点已删，箭头先对得准 */
 
   /* 锚点 */
   .anc{position:absolute;top:50%;width:4px;height:4px;border-radius:50%;background:#0b1017;
@@ -537,7 +534,8 @@
   .jump.on{display:block}
 
   /* 输入栏：+ / 输入 / 🎙 / 圆形发送 */
-  footer{display:flex;align-items:center;gap:6px}
+  footer{display:flex;flex-direction:column;align-items:stretch;gap:0;padding-bottom:10px;margin-top:auto}
+  footer .crow{display:flex;align-items:center;gap:6px}
   #plus,#mic{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
     font:12px/1 ui-monospace,Menlo,monospace;color:var(--soft);background:var(--inset);
     border:1px solid var(--line);cursor:pointer;padding:0}
@@ -703,10 +701,15 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
 
 
 <footer>
-  <button id="plus" title="附加（未接）">+</button>
-  <textarea id="input" rows="1" placeholder="给 云机 发消息"></textarea>
-  <button id="mic" title="语音（未接）">🎙</button>
-  <button id="send" aria-label="发送"><svg viewBox="0 0 24 24"><path d="M4 12h13M12 6l6 6-6 6"/></svg></button>
+  <div class="crow">
+    <button id="plus" title="附加（未接）">+</button>
+    <textarea id="input" rows="1" placeholder="给 云机 发消息"></textarea>
+    <button id="mic" title="语音（未接）">🎙</button>
+    <button id="send" aria-label="发送"><svg viewBox="0 0 24 24"><path d="M4 12h13M12 6l6 6-6 6"/></svg></button>
+  </div>
+  <div class="tele" id="tele">
+    <span>qph-0.8</span><span>mac :8777</span><span id="teleAdb">adb :—</span><span id="teleModel">grok-4.7</span>
+  </div>
 </footer>
 
 <script>
@@ -1436,9 +1439,5 @@ setTimeout(() => { refreshLive(true); startStream();
 document.addEventListener("visibilitychange", () => { if(!document.hidden) refreshLive(true); });
 
 </script>
-
-<footer class="tele" id="tele">
-  <span>qph-0.8</span><span>mac :8777</span><span id="teleAdb">adb :—</span><span id="teleModel">grok-4.7</span>
-</footer>
 </body>
 </html>
