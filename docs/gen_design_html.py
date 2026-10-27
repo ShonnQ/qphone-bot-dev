@@ -29,7 +29,7 @@ body{
   padding:36px 44px 80px;
 }
 .wrap{max-width:1000px;margin:0 auto}
-h1{font-size:27px;line-height:1.35;margin:0 0 6px;letter-spacing:.2px}
+h1{font-size:27px;line-height:1.35;margin:0 0 6px;letter-spacing:.2px;text-align:center}
 h1 + blockquote{margin-top:10px}
 h2{font-size:19px;margin:38px 0 14px;padding-bottom:7px;border-bottom:1px solid var(--line)}
 h3{font-size:16.5px;margin:28px 0 10px;color:var(--fg)}
@@ -53,7 +53,7 @@ hr{border:0;border-top:1px solid var(--line);margin:34px 0}
 a{color:var(--acc)}
 strong{font-weight:700}
 .meta{font:11.5px/1 ui-monospace,Menlo,monospace;color:var(--soft);
-  display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 0}
+  display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:14px 0 0}
 .meta span{background:var(--code);border:1px solid var(--line2);border-radius:999px;padding:4px 9px}
 .nowrap{white-space:nowrap}
 /* 架构总览：深色图卡，图内自带配色，唔跟亮色主题 */
@@ -81,7 +81,7 @@ def main() -> int:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 {ver}</title>
+<title>QPhone Bot 详细设计说明书 {ver}</title>
 <style>{CSS}</style>
 </head>
 <body><div class="wrap">
