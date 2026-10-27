@@ -266,181 +266,6 @@ strong{font-weight:700}
 </tbody>
 </table>
 <p>推论（排查用）：四只手各自独立 —— <code>snapshothelper</code> 死只废 L1a；WebView socket 冇（App 冇开调试）只废 L1b；Portal 死只废 L2；L0 靠 adbd，前三只死都唔影响。</p>
-<h2>版本变更历史</h2>
-<blockquote>
-<p>只记一句结论；改动细节、实测数据、踩过嘅坑睇 <code>docs/里程碑-2026-10-23.md</code> 对应小节。</p>
-</blockquote>
-<table>
-<thead>
-<tr>
-<th>版本</th>
-<th>变更</th>
-<th>时间</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>v0.38</td>
-<td><strong>语义路由层 S 落地</strong>：三层规则全 miss 才问一次模型出「意图+槽位」，派去 L0/L1a/L1b（§3.4.17）</td>
-<td>10-27</td>
-</tr>
-<tr>
-<td>v0.37</td>
-<td>S 层设计稿（规则先行 + 语义兜底，L1a/L1b 一样食语义）</td>
-<td>10-27</td>
-</tr>
-<tr>
-<td>v0.36</td>
-<td><strong>L0 解析纪律</strong>：语气词 / 补语 / 别名表补洞；卸载查唔到包即刻报，唔落 L2</td>
-<td>10-27</td>
-</tr>
-<tr>
-<td>v0.35</td>
-<td>步骤日志过程行加<strong>服务端副本</strong>，刷新后由 <code>/history</code> 重放</td>
-<td>10-27</td>
-</tr>
-<tr>
-<td>v0.34</td>
-<td><strong>接管场景分类</strong>：只有人肉步骤（登录/验证码/付款/扫码）弹人，技术失败唔弹</td>
-<td>10-27</td>
-</tr>
-<tr>
-<td>v0.33</td>
-<td>执行模型统一 <code>traework/DeepSeek-V4-Pro-Official</code></td>
-<td>10-27</td>
-</tr>
-<tr>
-<td>v0.32</td>
-<td>修步骤日志中途停更（<code>pump()</code> 里 <code>return</code> 断流）；异常行改红标可见</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.31</td>
-<td>四只手运行时高亮；修 <code>layerMark()</code> 未命中/未轮到语义</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.30</td>
-<td>云机段版面：四手竖排 + 云机 UI 并排</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.29</td>
-<td>四手改竖排；坑：<code>paint()</code> 覆写 <code>className</code>，附加 class 用结构选择器</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.28</td>
-<td>架构图云机段拆四手；<code>cdp_targets()</code> 一 socket 一条 forward，修 forward 泄漏</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.27</td>
-<td>步骤日志内部滚动；取消完单自动回桌面（<code>QPHONE_HOME_AFTER=0</code>）</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.26</td>
-<td>新增步骤日志 <code>#slBody</code>（分组件、分色、去噪、去重）</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.25</td>
-<td>版面：流程图面板 / 会话窗隔离，聊天区内滚，输入框吸底</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.24</td>
-<td>命中更显眼；新增人工接管后续跑（最多 3 次，步数累计 ≤20）</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.23</td>
-<td>精简会话头条，只留状态点 + 清空</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.22</td>
-<td>修流程图箭头对唔齐（<code>::after</code> 抢用、虚线改 gradient）</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.21</td>
-<td>执行层命中动画 + 「执行层占比」统计</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.20</td>
-<td>架构图并入本文（<code>架构图.html</code> 删除）</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.19</td>
-<td>修包名误判（应用宝 / 印象笔记）；「去<app>做X」；<code>GET /layers</code> 公示触发条件</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.18</td>
-<td>修三个实操 bug：气泡字色 / 每单步数清零 / 执行层覆盖太窄</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.17</td>
-<td>文档结构调整（§3.5 併入 §3.4）</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.16</td>
-<td>执行层改流程图内常驻组件（四格 + 命中高亮）</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.15</td>
-<td>L0/L1a/L1b 落地 <code>layers.py</code>，<code>/turn</code> 先走确定性三层</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.14</td>
-<td>实况窗改 H.264 直播（<code>screenrecord</code> → <code>/stream</code> → WebCodecs）</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.13</td>
-<td>修云机「存储有问题」：<code>/data</code> 改 Docker 命名卷</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.12</td>
-<td>实况窗加触控（<code>/device/tap</code> <code>swipe</code> <code>key</code>）</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.11</td>
-<td>本地 redroid 13 跑通 + <code>scripts/redroid-up.sh</code></td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.10</td>
-<td>执行目标改本地（AVD → redroid），补三环境实测</td>
-<td>10-26</td>
-</tr>
-<tr>
-<td>v0.9</td>
-<td>新增 §3.4 执行层设计（L0/L1a/L1b/L2）</td>
-<td>10-23</td>
-</tr>
-<tr>
-<td>v0.8</td>
-<td>改薄壳（删除 Rakazo）；通道定 <code>POST /turn</code> + 事件流</td>
-<td>10-22</td>
-</tr>
-<tr>
-<td>v0.7</td>
-<td>按详细设计说明书重写，只留已核实内容</td>
-<td>10-19</td>
-</tr>
-</tbody>
-</table>
 <h2>1. 引言</h2>
 <h3>1.1 编写目的</h3>
 <p>本文说明第一部云机和它旁边的控制程序怎么摆、怎么调用。编码以此为准。没核实的不写成已有程序。</p>
@@ -1577,6 +1402,181 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <td>B7</td>
 <td>壳的形态</td>
 <td>未定。候选：Telegram / Hermes 桌面顶，或自写 Tauri / Electron 薄壳</td>
+</tr>
+</tbody>
+</table>
+<h2>版本变更历史</h2>
+<blockquote>
+<p>只记一句结论；改动细节、实测数据、踩过嘅坑睇 <code>docs/里程碑-2026-10-23.md</code> 对应小节。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>变更</th>
+<th>时间</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v0.38</td>
+<td><strong>语义路由层 S 落地</strong>：三层规则全 miss 才问一次模型出「意图+槽位」，派去 L0/L1a/L1b（§3.4.17）</td>
+<td>10-27</td>
+</tr>
+<tr>
+<td>v0.37</td>
+<td>S 层设计稿（规则先行 + 语义兜底，L1a/L1b 一样食语义）</td>
+<td>10-27</td>
+</tr>
+<tr>
+<td>v0.36</td>
+<td><strong>L0 解析纪律</strong>：语气词 / 补语 / 别名表补洞；卸载查唔到包即刻报，唔落 L2</td>
+<td>10-27</td>
+</tr>
+<tr>
+<td>v0.35</td>
+<td>步骤日志过程行加<strong>服务端副本</strong>，刷新后由 <code>/history</code> 重放</td>
+<td>10-27</td>
+</tr>
+<tr>
+<td>v0.34</td>
+<td><strong>接管场景分类</strong>：只有人肉步骤（登录/验证码/付款/扫码）弹人，技术失败唔弹</td>
+<td>10-27</td>
+</tr>
+<tr>
+<td>v0.33</td>
+<td>执行模型统一 <code>traework/DeepSeek-V4-Pro-Official</code></td>
+<td>10-27</td>
+</tr>
+<tr>
+<td>v0.32</td>
+<td>修步骤日志中途停更（<code>pump()</code> 里 <code>return</code> 断流）；异常行改红标可见</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.31</td>
+<td>四只手运行时高亮；修 <code>layerMark()</code> 未命中/未轮到语义</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.30</td>
+<td>云机段版面：四手竖排 + 云机 UI 并排</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.29</td>
+<td>四手改竖排；坑：<code>paint()</code> 覆写 <code>className</code>，附加 class 用结构选择器</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.28</td>
+<td>架构图云机段拆四手；<code>cdp_targets()</code> 一 socket 一条 forward，修 forward 泄漏</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.27</td>
+<td>步骤日志内部滚动；取消完单自动回桌面（<code>QPHONE_HOME_AFTER=0</code>）</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.26</td>
+<td>新增步骤日志 <code>#slBody</code>（分组件、分色、去噪、去重）</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.25</td>
+<td>版面：流程图面板 / 会话窗隔离，聊天区内滚，输入框吸底</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.24</td>
+<td>命中更显眼；新增人工接管后续跑（最多 3 次，步数累计 ≤20）</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.23</td>
+<td>精简会话头条，只留状态点 + 清空</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.22</td>
+<td>修流程图箭头对唔齐（<code>::after</code> 抢用、虚线改 gradient）</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.21</td>
+<td>执行层命中动画 + 「执行层占比」统计</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.20</td>
+<td>架构图并入本文（<code>架构图.html</code> 删除）</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.19</td>
+<td>修包名误判（应用宝 / 印象笔记）；「去<app>做X」；<code>GET /layers</code> 公示触发条件</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.18</td>
+<td>修三个实操 bug：气泡字色 / 每单步数清零 / 执行层覆盖太窄</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.17</td>
+<td>文档结构调整（§3.5 併入 §3.4）</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.16</td>
+<td>执行层改流程图内常驻组件（四格 + 命中高亮）</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.15</td>
+<td>L0/L1a/L1b 落地 <code>layers.py</code>，<code>/turn</code> 先走确定性三层</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.14</td>
+<td>实况窗改 H.264 直播（<code>screenrecord</code> → <code>/stream</code> → WebCodecs）</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.13</td>
+<td>修云机「存储有问题」：<code>/data</code> 改 Docker 命名卷</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.12</td>
+<td>实况窗加触控（<code>/device/tap</code> <code>swipe</code> <code>key</code>）</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.11</td>
+<td>本地 redroid 13 跑通 + <code>scripts/redroid-up.sh</code></td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.10</td>
+<td>执行目标改本地（AVD → redroid），补三环境实测</td>
+<td>10-26</td>
+</tr>
+<tr>
+<td>v0.9</td>
+<td>新增 §3.4 执行层设计（L0/L1a/L1b/L2）</td>
+<td>10-23</td>
+</tr>
+<tr>
+<td>v0.8</td>
+<td>改薄壳（删除 Rakazo）；通道定 <code>POST /turn</code> + 事件流</td>
+<td>10-22</td>
+</tr>
+<tr>
+<td>v0.7</td>
+<td>按详细设计说明书重写，只留已核实内容</td>
+<td>10-19</td>
 </tr>
 </tbody>
 </table>
