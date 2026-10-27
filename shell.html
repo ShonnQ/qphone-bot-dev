@@ -594,6 +594,7 @@
   .sl-row.l2 .tag{color:var(--acc1);border-color:color-mix(in srgb,var(--acc1) 42%,transparent)}
   .sl-row.ok .msg{color:var(--ok)}
   .sl-row.bad .msg{color:var(--no)}
+  .sl-row.bad .tag{color:var(--no);border-color:color-mix(in srgb,var(--no) 45%,transparent)}
   .sl-row.human .tag{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
   html[data-theme="dark"] .sl-row.l0 .tag{color:#FBBF24;border-color:rgba(251,191,36,.42)}
 
@@ -952,7 +953,9 @@ function paint(st){
   const labels = {idle:"等紧你讲嘢", turn:"交畀 /turn", step:"Mobilerun 睇屏",
                   think:"模型谂紧", act:"Portal 做紧", human:"要人睇一眼", done:"做完", chat:"对话中"};
   nowEl.textContent = labels[p] || p;
-  if(LAYER_USED && p !== "idle" && p !== "chat")
+  if(p === "done")      nowEl.textContent = "做完" + (LAYER_USED ? " · 行 " + LAYER_USED : "");
+  else if(p === "human") nowEl.textContent = "卡住 · 要人" + (LAYER_USED ? " · 行 " + LAYER_USED : "");
+  else if(LAYER_USED && p !== "idle" && p !== "chat")
     nowEl.textContent = LAYER_USED + " · " + (LAYER_LABEL || labels[p] || "");
   const sc = $("stepChip");
   if(st.of && st.of > 0){
@@ -1165,7 +1168,7 @@ function slAdd(tag, text, cls){
   const t = document.createElement("span"); t.className = "tag"; t.textContent = tag;
   const m = document.createElement("span"); m.className = "msg"; m.textContent = String(text).slice(0, 400);
   const prev = b.lastElementChild;
-  if(prev && prev.firstChild.textContent === tag && prev.lastChild.textContent === m.textContent) return;
+  if(prev && prev.lastChild.textContent === m.textContent) return;   // 同一句唔理标签，只写一次
   row.append(t, m); b.append(row);
   while(b.children.length > 400) b.firstChild.remove();
   b.scrollTop = b.scrollHeight;
@@ -1174,6 +1177,7 @@ function slAdd(tag, text, cls){
 // SSE 消费：/turn 同 /turn/resume 共用
 async function pump(resp, text){
   const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = "";
+  let sawResult = false;
     while(true){
       const {value, done} = await reader.read(); if(done) break;
       buf += dec.decode(value, {stream:true});
@@ -1247,6 +1251,7 @@ async function pump(resp, text){
             chatEl.append(g); lastSide = "bot"; scrollDown(true);
           }
         }else if(ev === "result"){
+          sawResult = true;
           typing(false); paint({phase:o.success ? "done" : "human"});
           refreshLive(true); slowLive = true;
           const used = LAYER_USED;
@@ -1256,17 +1261,24 @@ async function pump(resp, text){
         }else if(ev === "progress"){
           const ln = String(o.line || "").replace(/^[\s·]+/, "");
           const mStep = ln.match(/^🔄\s*Step (\d+)\/(\d+)/);
-          if(mStep){ slAdd("步", mStep[1] + " / " + mStep[2], "l2"); return; }
-          const noise = !ln
-            || /^(L0|L1a|L1b|L2)\s*·/.test(ln) || /^执行层未接得住/.test(ln)
-            || /^(✨|🚀|🤖|👁|📁|🔧|⚙|🎯|📦)/.test(ln)
-            || /^(<|FastAgent response|Malformed|Traceback|Attempt |Tool results)/.test(ln);
-          if(!noise) slAdd("LOG", ln, "");
+          if(mStep){
+            slAdd("步", mStep[1] + " / " + mStep[2], "l2");      // 注意：唔可以 return，会整死 pump()
+          }else if(/^(Malformed|Attempt \d+ failed|Error during task|Error code:\s*\d+|Traceback)/.test(ln)){
+            slAdd("异常", ln.replace(/^❌\s*/, ""), "bad");        // 病因要见到，唔好当噪音滤走
+          }else{
+            const noise = !ln
+              || /^(L0|L1a|L1b|L2)\s*·/.test(ln) || /^执行层未接得住/.test(ln)
+              || /^(✨|🚀|🤖|👁|📁|🔧|⚙|🎯|📦|💡|\[PostHog\])/.test(ln)
+              || /^(<|FastAgent response|Tool results)/.test(ln)
+              || /<\/?(error|result|name|function|parameter|invoke|calls)/.test(ln);
+            if(!noise) slAdd("LOG", ln, "");
+          }
         }else if(ev === "trajectory"){
           slAdd("轨迹", "截图序列已存：" + (o.id || ""), "");
         }
       }
     }
+  if(!sawResult) slAdd("断流", "事件流冇 result 就收咗（服务端可能崩咗，去 /history 睇）", "bad");
 }
 
 // 人工接管后：用户按「已处理好，继续」
