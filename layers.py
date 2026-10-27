@@ -228,8 +228,6 @@ def l0_try(text: str) -> dict | None:
     m = re.search(r"([^\s，。？！]{1,12})\s*(?:装咗未|装左未|装咗没|装了吗|装咗冇|有冇装|有无装|装咗未呀)", t)
     if m:                                                   # 「百度网盘装咗未」：app 名喺前面
         name = _clean_app_name(m.group(1))
-        if _wants_ui(t):
-            return None                       # 「去设置搜下 QQ 有冇装」→ 交 L1a/L1b/L2 真去界面做
         pkg = resolve_package(name)
         if pkg and pkg in installed():
             return trace("L0", f"查有冇装 {name}", [f"pm list packages {pkg}"], t0, True, f"有装：{pkg}")
@@ -245,8 +243,6 @@ def l0_try(text: str) -> dict | None:
     m = re.search(r"(?:有无|有冇|有没有|是否)(?:装|安装|安装咗)?\s*([^\s，。？！]{1,12})", t, re.I)
     if m:
         name = _clean_app_name(m.group(1))
-        if _wants_ui(t):
-            return None
         pkg = resolve_package(name)
         if pkg and pkg in installed():
             return trace("L0", f"查有冇装 {name}", [f"pm list packages {pkg}"], t0, True, f"有装：{pkg}")

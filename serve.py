@@ -348,6 +348,46 @@ def classify(text: str) -> dict:
     return {"mode": "unclear", "why": "冇识别到动作词", "task": 0, "chat": 0}
 
 
+QUERY_RE = re.compile(
+    r"(?:有无|有冇|有没有|是否)\s*(?:装|安装|安装咗|安)?\s*([^\s，。？！]{1,12})"
+    r"|([^\s，。？！]{1,12})\s*(?:装咗未|装左未|装咗没|装了吗|装咗冇|装咗未呀|有冇装)")
+
+
+def query_answer(text: str):
+    """查询类问题 → (name, pkg, 有冇)；答唔到返 None。结论一定要讲出口，唔可以只讲「完成」。"""
+    m = QUERY_RE.search(text or "")
+    if not m:
+        return None
+    raw = (m.group(1) or m.group(2) or "").strip()
+    name = layers._clean_app_name(raw)
+    if not name:
+        return None
+    # 「有无…」后面可能接住非 app 名词（兴趣、必要…）→ 冇 app 迹象就唔当成查询
+    if not re.search(r"(应用|程式|软件|app|装|安装)", text, re.I) and not layers.resolve_package(name):
+        return None
+    try:
+        pkg = layers.resolve_package(name)
+        inst = layers.installed()
+    except Exception:                                     # noqa: BLE001
+        return None
+    if pkg:
+        return (name, pkg, pkg in inst)
+    hits = [p for p in inst if name.lower() in p.lower()]
+    if hits:
+        return (name, hits[0], True)
+    return (name, "", False)
+
+
+def query_head(ans) -> str:
+    """(name, pkg, 有冇) → 一句结论。"""
+    name, pkg, has = ans
+    if has:
+        return f"有：{pkg}" + (f"（{name}）" if name and name.lower() not in pkg.lower() else "")
+    if pkg:
+        return f"冇：{pkg}"
+    return f"冇：包表揾唔到「{name}」"
+
+
 def chat_context() -> str:
     """对话模式嘅事实底：设备 + 当前状态 + 上一单结果（唔加截图，慳钱）。"""
     st = dict(STATE)
@@ -523,8 +563,12 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
         hist_task_update(CURRENT_TASK["id"], phase="done" if ok else "human", msg=detail[:300])
         _pub(q, "done" if ok else "human", action="")
         st, tot = layer_bump(tr["layer"])
-        q.put(("result", {"success": ok,
-                          "message": f"{tr['label']}（{tr['layer']}，{tr['ms']} ms）" if ok else detail,
+        ans = query_answer(text)
+        if ans:
+            msg = query_head(ans) + f"（{tr['layer']} {tr['ms']} ms）"
+        else:
+            msg = f"{tr['label']}（{tr['layer']}，{tr['ms']} ms）" if ok else detail
+        q.put(("result", {"success": ok, "message": msg, "answer": bool(ans),
                           "layer_stats": st, "layer_total": tot}))
         q.put(("_end", {}))          # L0/L1 已直接落到目标态，唔按 home 复位
         return
@@ -547,7 +591,9 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
         if success:
             RUN["active"] = False
             _pub(q, "done", action="")
-            q.put(("result", {"success": True, "message": message or "做完",
+            ans = query_answer(text)
+            msg = (query_head(ans) + "；" + (message or "做完")) if ans else (message or "做完")
+            q.put(("result", {"success": True, "message": msg, "answer": bool(ans),
                               "layer_stats": lstats, "layer_total": ltot}))
         else:
             # 分类收尾：A 类（登录/验证码/付款）弹接管卡，B 类（技术失败）唔弹人
@@ -621,7 +667,9 @@ def emit_fail(q, message: str, tid: str, lstats=None, ltot: int = 0) -> None:
         RUN["active"] = False
         _pub(q, "human", action="")
         q.put(("needs_human", {"reason": message or "未做到", "hand_scope": "none"}))
-        q.put(("result", {"success": False, "message": message or "未做到",
+        ans = query_answer(RUN.get("text") or "")
+        msg = (query_head(ans) + "；" + (message or "未做到")) if ans else (message or "未做到")
+        q.put(("result", {"success": False, "message": msg, "answer": bool(ans),
                           "layer_stats": lstats, "layer_total": ltot}))
 
 

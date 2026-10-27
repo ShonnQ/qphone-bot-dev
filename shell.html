@@ -1294,7 +1294,7 @@ async function pump(resp, text){
           const used = LAYER_USED;
           taskFinish(!!o.success, o.message);
           layerStats(o.layer_stats, o.layer_total, used);
-          slAdd(o.success ? "完成" : "失败", o.message || "", o.success ? "ok" : "bad");
+          slAdd(o.answer ? "答案" : (o.success ? "完成" : "失败"), o.message || "", o.success ? "ok" : "bad");
         }else if(ev === "progress"){
           const ln = String(o.line || "").replace(/^[\s·]+/, "");
           const mStep = ln.match(/^🔄\s*Step (\d+)\/(\d+)/);
