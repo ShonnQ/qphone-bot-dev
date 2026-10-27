@@ -204,6 +204,20 @@ def open_app(pkg: str) -> tuple[bool, str, str]:
     return False, f"前台仍系 {fg_package() or '未知'}", f"am start -W -n {comp}"
 
 
+def _clean_app_name(name: str) -> str:
+    """「QQ这个应用」「微信呢个app」→「QQ」「微信」。"""
+    name = re.sub(r"^(?:帮我|同我|帮手|睇|看|查|问|试|打开|开)+", "", (name or "").strip())
+    for _ in range(3):
+        name = re.sub(r"(?:这个|呢个|这隻|呢隻|嗰个|这个应用|呢个应用|应用|程式|软件|app)$", "", name, flags=re.I).strip()
+    return name
+
+
+def _wants_ui(text: str) -> bool:
+    """句子里明讲「去设置 / 喺界面 / 搜索框」→ 要真去界面做，唔可以只答包表。"""
+    return bool(re.search(r"(?:去|喺|系|入|进入|打开|开)\s*[^\s，。]{0,4}(?:设置|设置界面|界面|搜索框)", text)
+                or re.search(r"搜索框|搜一?下|搜下|搜索", text))
+
+
 def l0_try(text: str) -> dict | None:
     """命中就返回 {layer,label,cmds,ok,why,ms}；唔命中返回 None。"""
     raw = text.strip()
@@ -213,8 +227,9 @@ def l0_try(text: str) -> dict | None:
     # 1b) 查有冇装某 app（L0 直接查包表，唔使开设置翻页）
     m = re.search(r"([^\s，。？！]{1,12})\s*(?:装咗未|装左未|装咗没|装了吗|装咗冇|有冇装|有无装|装咗未呀)", t)
     if m:                                                   # 「百度网盘装咗未」：app 名喺前面
-        name = re.sub(r"^(?:帮我|同我|帮手|睇|看|查|问|试|打开|开)+", "", m.group(1).strip())
-        name = re.sub(r"(app|应用|应用程式|程式)$", "", name, flags=re.I).strip()
+        name = _clean_app_name(m.group(1))
+        if _wants_ui(t):
+            return None                       # 「去设置搜下 QQ 有冇装」→ 交 L1a/L1b/L2 真去界面做
         pkg = resolve_package(name)
         if pkg and pkg in installed():
             return trace("L0", f"查有冇装 {name}", [f"pm list packages {pkg}"], t0, True, f"有装：{pkg}")
@@ -229,7 +244,9 @@ def l0_try(text: str) -> dict | None:
 
     m = re.search(r"(?:有无|有冇|有没有|是否)(?:装|安装|安装咗)?\s*([^\s，。？！]{1,12})", t, re.I)
     if m:
-        name = re.sub(r"(app|应用|应用程式|程式)$", "", m.group(1).strip(), flags=re.I)
+        name = _clean_app_name(m.group(1))
+        if _wants_ui(t):
+            return None
         pkg = resolve_package(name)
         if pkg and pkg in installed():
             return trace("L0", f"查有冇装 {name}", [f"pm list packages {pkg}"], t0, True, f"有装：{pkg}")
