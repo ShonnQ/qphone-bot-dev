@@ -1394,6 +1394,46 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <blockquote>
 <p>唔用 Android 开发者选项：实测 <code>settings put system pointer_location 1</code> 只显示顶栏坐标图，<code>adb shell input tap</code> 注入的手势<strong>唔会</strong>出现在叠加层（注入事件唔经触摸屏那一层），<code>show_touches</code> 同理——所以自己画。</p>
 </blockquote>
+<h4>3.4.18 装应用快路径（v0.39）</h4>
+<p>原本「下载安装 X 并打开」实测 <strong>18 步</strong>，四个成因逐个打：</p>
+<table>
+<thead>
+<tr>
+<th>成因</th>
+<th>浪费</th>
+<th>做法</th>
+<th>落喺边一区</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>冇商店概念：靠视觉翻抽屉搵商店</td>
+<td>5 步</td>
+<td><code>stores()</code> 用 <code>pm list packages</code> 对照 14 条商店表（应用宝→小米→华为→…→Google Play 排最后）；L0 直接开最前嗰个</td>
+<td><strong>事实层</strong>（adb 先查清）</td>
+</tr>
+<tr>
+<td>开屏广告 + 点搜索框被弹去广告</td>
+<td>3 步</td>
+<td><code>STORE_SEARCH_ACT</code> 直落 <code>com.tencent.nucleus.search.SearchActivity</code>，跳过 Splash</td>
+<td><strong>路由层</strong>（多一条确定性入口）</td>
+</tr>
+<tr>
+<td>中文输入唔到（<code>input text</code> 打中文 NPE）</td>
+<td>卡死</td>
+<td><code>input_text()</code> 装 ADBKeyBoard 用 broadcast 落 unicode；未装就退 <code>input text</code>（只 ASCII）</td>
+<td><strong>执行层</strong>（L0 落字能力）</td>
+</tr>
+<tr>
+<td>装完对住「Installing…」空等</td>
+<td>5–6 步</td>
+<td><code>_install_watcher()</code> 每 2 s 查包表：装咗即 <code>am start</code>（弹窗顶住就退一步重试 3 次）、<code>pm grant</code> 通知、<code>terminate</code> 模型</td>
+<td><strong>收尾判定层</strong>（adb 确认，取代模型自述）</td>
+</tr>
+</tbody>
+</table>
+<p>另：<code>l2_next</code> 令开商店后直接落 L2（唔再扫 L1a/L1b，省 ~7 s）；指代词（佢/呢个）唔当控件名；<code>install_target()</code> 统一抽名（修「安装快手」被抓成 app 名）；补 百度贴吧 / 快手极速版 别名。</p>
+<p><strong>实测</strong>：百度贴吧 18 步 → 高德地图 <strong>5 步</strong>（装完即收尾，<code>com.autonavi.minimap</code>）；腾讯地图 13 步（模型自己做完，前台 <code>com.tencent.map</code> 已核）。</p>
 <h4>3.4.17 语义路由层（S 层）</h4>
 <p><strong>一句话</strong>：规则先跑（命中就 0 模型、0 延迟）；<strong>三层规则全 miss 才问一次模型</strong>，只拿「意图 + 槽位」，再按路由表派去 L0 / L1a / L1b。L1a、L1b 一样食语义，唔止 L0。</p>
 <pre><code>L0 规则 → L1a 规则 → L1b 规则 ──全 miss──→ S 层（一次 LLM，只出 JSON）

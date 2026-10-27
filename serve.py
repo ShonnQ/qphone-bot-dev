@@ -528,12 +528,17 @@ def _install_watcher(orig_text: str, proc, stop: dict, got: dict) -> None:
             time.sleep(1.2)
             opened = False
             if want_open:
-                try:
-                    layers.open_app(pkg)
-                    time.sleep(1.6)
-                    opened = layers.fg_package() == pkg
-                except Exception:                          # noqa: BLE001
-                    opened = False
+                for attempt in range(3):                   # 安装完成弹窗会顶住 am start，退一步再开
+                    try:
+                        layers.open_app(pkg)
+                        time.sleep(2.2)
+                        opened = layers.fg_package() == pkg
+                    except Exception:                      # noqa: BLE001
+                        opened = False
+                    if opened:
+                        break
+                    layers.sh("input keyevent 4")
+                    time.sleep(0.8)
             layers.sh(f"pm grant {pkg} android.permission.POST_NOTIFICATIONS")
             got.update(hit=True, pkg=pkg, opened=opened,
                        msg=f"装完即收尾（adb 确认）：{pkg} 已安装" + ("并已打开" if opened else "，未确认打开"))
