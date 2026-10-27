@@ -233,44 +233,39 @@ strong{font-weight:700}
 </tr>
 </tbody>
 </table>
-<p><strong>云机侧「手」的实际组成</strong>（四层各走各嘅通道，互不依赖）</p>
+<p><strong>每层自己只手</strong>（四只手各管各，互不依赖）</p>
 <table>
 <thead>
 <tr>
 <th>层</th>
-<th>手</th>
-<th>走边条通道</th>
-<th>经 Portal？</th>
+<th>自己只手</th>
+<th>通道</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>L0</td>
-<td>系统命令</td>
-<td><code>adbd</code>：<code>am start</code> / <code>pm list packages</code> / <code>settings put</code> / <code>input</code></td>
-<td>❌</td>
+<td><strong>adbd</strong>（系统命令，唔使装任何嘢）</td>
+<td><code>am start</code> / <code>am force-stop</code> / <code>pm uninstall</code> / <code>pm clear</code> / <code>pm list packages</code> / <code>settings put</code> / <code>input</code></td>
 </tr>
 <tr>
 <td>L1a</td>
-<td>agent-device</td>
-<td><code>adbd</code> + 机内 <code>com.callstack.agentdevice.snapshothelper</code>（v0.21.31，取无障碍树 + 派发点击）</td>
-<td>❌</td>
+<td><strong>snapshothelper</strong>（机内无障碍 helper <code>com.callstack.agentdevice.snapshothelper</code> v0.21.31）</td>
+<td><code>adbd</code> 叫佢出无障碍树 + 派发点击</td>
 </tr>
 <tr>
 <td>L1b</td>
-<td>页面 JS</td>
-<td><code>@webview_devtools_remote_&lt;pid&gt;</code> → <code>adb forward</code> → CDP <code>Runtime.evaluate</code>（<code>el.click()</code>）</td>
-<td>❌</td>
+<td><strong>WebView 调试 socket</strong>（页面本体，唔使额外组件）</td>
+<td><code>@webview_devtools_remote_&lt;pid&gt;</code> → <code>adb forward</code> → CDP <code>Runtime.evaluate</code> / <code>Input.insertText</code></td>
 </tr>
 <tr>
 <td>L2</td>
-<td>Mobilerun</td>
-<td><code>com.mobilerun.portal</code>：<code>MobilerunAccessibilityService</code> 读树 + <code>MobilerunContentProvider</code> 走无障碍 <code>dispatchGesture</code></td>
-<td>✅ <strong>唯一</strong></td>
+<td><strong>Portal</strong>（<code>com.mobilerun.portal</code>）</td>
+<td><code>MobilerunAccessibilityService</code> 读树 + <code>MobilerunContentProvider</code> 走无障碍 <code>dispatchGesture</code></td>
 </tr>
 </tbody>
 </table>
-<p>推论（排查用）：Portal 死 → 只有 L2 废，L0/L1a/L1b 照跑；<code>snapshothelper</code> 死 → 只有 L1a 废。</p>
+<p>推论（排查用）：四只手各自独立 —— <code>snapshothelper</code> 死只废 L1a；WebView socket 冇（App 冇开调试）只废 L1b；Portal 死只废 L2；L0 靠 adbd，前三只死都唔影响。</p>
 <h2>版本变更历史</h2>
 <table>
 <thead>
