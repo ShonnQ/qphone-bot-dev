@@ -76,15 +76,38 @@ _ACT = {"in_think": False, "buf": []}
 _ACT_LOCK = threading.Lock()
 LAST_RESULT = {"ok": None, "msg": "", "ts": 0.0}
 
-# 执行层用量（每单用咗边层就 +1，会话级累计），result 事件带埋畀壳画占比
+# 执行层用量（每单用咗边层就 +1，累计写入 ~/.qphone/layer-stats.json，重启都唔清零）
 LAYER_STATS = {"L0": 0, "L1a": 0, "L1b": 0, "L2": 0}
 _LAYER_LOCK = threading.Lock()
+LAYER_FILE = os.path.expanduser("~/.qphone/layer-stats.json")
+
+
+def _load_layer_stats() -> None:
+    try:
+        if os.path.isfile(LAYER_FILE):
+            d = json.load(open(LAYER_FILE, encoding="utf-8"))
+            for k in LAYER_STATS:
+                LAYER_STATS[k] = int(d.get(k) or 0)
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
+def _save_layer_stats() -> None:
+    try:
+        os.makedirs(os.path.dirname(LAYER_FILE), exist_ok=True)
+        json.dump(LAYER_STATS, open(LAYER_FILE, "w", encoding="utf-8"), ensure_ascii=False)
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
+_load_layer_stats()
 
 
 def layer_bump(k: str):
     with _LAYER_LOCK:
         if k in LAYER_STATS:
             LAYER_STATS[k] += 1
+            _save_layer_stats()
         return dict(LAYER_STATS), sum(LAYER_STATS.values())   # 对话模式要知上一单做到未
 
 # ---- 会话历史（刷新 / 断线都唔会消失）----
@@ -1322,11 +1345,17 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
         if path == "/state":
-            return self._send_json(dict(STATE))
+            d = dict(STATE)
+            d["layer_stats"] = dict(LAYER_STATS)
+            d["layer_total"] = sum(LAYER_STATS.values())
+            return self._send_json(d)
         if path == "/history":
             with HIST_LOCK:
                 items = [dict(x) for x in HISTORY]
-            return self._send_json({"items": items, "state": dict(STATE),
+            st = dict(STATE)
+            st["layer_stats"] = dict(LAYER_STATS)
+            st["layer_total"] = sum(LAYER_STATS.values())
+            return self._send_json({"items": items, "state": st,
                                     "model": MODEL, "of": int(STEPS)})
         if path == "/health":
             return self._send_json({"ok": True, "target": TARGET, "model": MODEL, "provider": PROVIDER})
