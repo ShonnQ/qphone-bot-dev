@@ -125,6 +125,19 @@ h1{
 }
 .docmeta span:first-child{color:#bfe9e1;border-color:var(--acc-dim)}
 
+/* ── 区域框（每个一级标题一节，照公司全景玻璃面板） ── */
+.card{
+  border:1px solid rgba(120,220,235,.14);
+  border-radius:14px;
+  padding:22px 26px 26px;
+  margin:18px 0;
+  background:linear-gradient(180deg,rgba(18,28,36,.72),rgba(10,16,21,.72));
+  backdrop-filter:blur(2px);
+}
+.card>h2:first-child{margin-top:0}
+.card>h2{padding-bottom:10px}
+.card table:last-child{margin-bottom:0}
+
 /* ── 标题层级 ── */
 h2{
   font-size:19px;margin:46px 0 16px;padding:0 0 10px;letter-spacing:.2px;
@@ -209,6 +222,7 @@ a:hover{border-bottom-color:var(--acc)}
 }
 @media print{
   body{background:#fff;color:#111}
+  .card{background:none;border-color:#d5dce2;backdrop-filter:none}
   body::before,body::after,html::after,.cosmos{display:none}
   h1{color:#111;-webkit-text-fill-color:#111}
   th{background:#f3f6f8;color:#111}
@@ -227,7 +241,7 @@ a:hover{border-bottom-color:var(--acc)}
   <span>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></span></div>
 </header>
 
-<h2>1. 引言</h2>
+<section class="card"><h2>1. 引言</h2>
 <h3>1.1 编写目的</h3>
 <p>本文说明第一部云机和它旁边的控制程序怎么摆、怎么调用。编码以此为准。没核实的不写成已有程序。</p>
 <h3>1.2 文档约定</h3>
@@ -261,7 +275,7 @@ a:hover{border-bottom-color:var(--acc)}
 </tr>
 </tbody>
 </table>
-<h2>2. 综合描述</h2>
+</section><section class="card"><h2>2. 综合描述</h2>
 <h3>2.1 系统目标</h3>
 <p>人在对话里交代一件事。事由控制程序在云 Android 上做完。卡住或做完，才回到对话。屏幕不是主界面。</p>
 <h3>2.2 系统概述</h3>
@@ -378,7 +392,7 @@ a:hover{border-bottom-color:var(--acc)}
 <p>第一部云机不在这台机上编译，用官方镜像（或租用实例）直接跑。</p>
 <p>这台虚拟机可以编译。A9 就是在这里编译出来的，编译产物不删。那是对照，不是这一部的组装方式。</p>
 <p>控制程序源码在 <code>~/projects/qphone-bot-dev</code>（暂定名），入口 <code>qphone.py</code>：零依赖 adb 薄壳，只做容器起停、开机状态、端口发现、装包、截图，不做决策。Mobilerun 用 <code>uv tool install mobilerun</code> 装入，agent 决策由它做。仓库名与许可证见附录 B4。</p>
-<h2>3. 系统详细设计</h2>
+</section><section class="card"><h2>3. 系统详细设计</h2>
 <h3>架构总览 · 执行分层</h3>
 <blockquote>
 <p>一句交代按「能唔能确定」由上往下用：<strong>L0 确定性命令 → L1a 无障碍树 → L1b WebView CDP → L2 视觉兜底</strong>。<br>
@@ -1478,7 +1492,7 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </table>
 <p><strong>开关与自查</strong>：<code>QPHONE_SEM=0</code> 全关；<code>QPHONE_SEM_MODEL</code> / <code>QPHONE_SEM_FALLBACK</code> / <code>QPHONE_SEM_TIMEOUT</code> 可调；<code>GET /layers</code> → <code>semantic</code>（模型、超时、缓存、统计、上次解析）。</p>
 <p><strong>本版唔做</strong>：多步任务拆解（仍 <code>unknown</code> → L2）、<code>scroll</code> 执行器、中文 IME 输入。</p>
-<h2>4. 用户界面详细设计</h2>
+</section><section class="card"><h2>4. 用户界面详细设计</h2>
 <h3>4.1 界面结构</h3>
 <p>主界面是壳里的对话。本文不重画这个界面。</p>
 <p>云机画面不是主界面，也不出现在壳里。要人接手时，画面在云机一侧打开。</p>
@@ -1487,7 +1501,7 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <p>约束：壳不写死平台，也不写死云机来源。换云机（容器 ↔ 租用实例）只改控制程序，壳一行不动。</p>
 <p>模型地址由人在控制程序一侧填写。本文不代填。<br>
 <strong>结果卡（<code>.task</code>）配色约束</strong>：结果行 <code>.t-dt</code> 用 <code>var(--fg)</code>（亮色实测对比 16.5:1），步数行 <code>.t-step</code> 用 <code>var(--soft)</code>（6.3:1）；暗色用 <code>html[data-theme="dark"]</code> 单独保留原浅色值。⚠️ 唔可以再写死 <code>#cfd8e3</code> / <code>#e9d9a8</code> 一类暗色专用色——亮色主题下会变「睇唔到字」。</p>
-<h2>附录 A 词汇表</h2>
+</section><section class="card"><h2>附录 A 词汇表</h2>
 <table>
 <thead>
 <tr>
@@ -1514,7 +1528,7 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tr>
 </tbody>
 </table>
-<h2>附录 B 待定问题</h2>
+</section><section class="card"><h2>附录 B 待定问题</h2>
 <table>
 <thead>
 <tr>
@@ -1561,7 +1575,7 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tr>
 </tbody>
 </table>
-<h2>版本变更历史</h2>
+</section><section class="card"><h2>版本变更历史</h2>
 <blockquote>
 <p>只记一句结论；改动细节、实测数据、踩过嘅坑睇 <code>docs/里程碑-2026-10-23.md</code> 对应小节。</p>
 </blockquote>
@@ -1735,5 +1749,5 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <td>10-19</td>
 </tr>
 </tbody>
-</table>
+</table></section>
 </div></body></html>
