@@ -1201,7 +1201,7 @@ def frame_worker() -> None:
 LAYERS_DOC = {
     "order": ["L0", "L1a", "L1b", "L2"],
     "rules": {
-        "L0": {"触发": "正则命中能力表（打开/关/查有无装/下载安装查重/音量/亮度/开关/截图/点坐标/滑动/ASCII 输入/查前台…）",
+        "L0": {"触发": "正则命中能力表（打开/关/卸载/清数据/查有无装/下载安装查重/音量/亮度/开关/截图/点坐标/滑动/ASCII 输入/查前台…）",
                "执行": "adb shell 直连：am start -W -n / input keyevent / settings put / pm list packages",
                "断言": "topResumedActivity 变到目标包、settings get 读回一致、pm list 有命中"},
         "L1a": {"触发": "正则「动词 + 1~12 字目标」，动词表 = 点击|点开|点|按下|按|选择|选|打开|进入|查找|找|搜|搜索|查看|睇|看|填|输入|tap|click",
