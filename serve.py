@@ -428,22 +428,8 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
             q.put(("result", {"success": True, "message": message or "做完",
                               "layer_stats": lstats, "layer_total": ltot}))
         else:
-            left = max(0, int(STEPS) - RUN["used"])
-            if RUN["round"] < MAX_RESUME and left > 0:
-                # 唔收工：交畀人接手（例如要登录），用户按「已完成」就续跑
-                _pub(q, "human", action="")
-                q.put(("need_hand", {"reason": message or "agent 未做到，要人接手",
-                                     "used": RUN["used"], "of": int(STEPS), "left": left,
-                                     "round": RUN["round"] + 1, "max": MAX_RESUME}))
-                q.put(("result", {"success": False, "resumable": True,
-                                  "message": message or "要你接手处理一下",
-                                  "layer_stats": lstats, "layer_total": ltot}))
-            else:
-                RUN["active"] = False
-                _pub(q, "human", action="")
-                q.put(("needs_human", {"reason": message or "agent 未做到，需要人睇屏"}))
-                q.put(("result", {"success": False, "message": message or "未做到",
-                                  "layer_stats": lstats, "layer_total": ltot}))
+            # 分类收尾：A 类（登录/验证码/付款）弹接管卡，B 类（技术失败）唔弹人
+            emit_fail(q, message, tid, lstats, ltot)
         if HOME_AFTER and success:
             press_home()
     except Exception as e:  # noqa: BLE001
@@ -454,8 +440,72 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
         q.put(("_end", {}))
 
 
-# ── 人工接管后续跑（登录 / 验证码 / 手动点完再继续）──
-RUN = {"text": "", "used": 0, "of": int(STEPS), "round": 0, "active": False, "note": ""}
+# ── 接管场景分类（2026-10-27 定案：只有「人肉步骤」先值得打扰用户）──
+# A 类：登录 / 验证码 / 付款 / 扫码 —— agent 冇凭证冇权限，用户做一步，之后 agent 继续。
+# B 类：模型白谂 / 工具坏 / 打转 / 步数尽 —— agent 自己兜底或收工报原因，唔可以弹人。
+HAND_WORDS_ACC = ("登录", "注册", "账号", "密码", "login", "sign in", "password")
+HAND_WORDS_OTP = ("验证码", "收码", "captcha", "otp", "人机验证", "滑块")
+HAND_WORDS_PAY = ("付款", "支付", "银行卡", "信用卡", "payment", "card")
+HAND_WORDS_SCAN = ("扫码", "二维码")
+
+
+def _read_end_reason(tid: str) -> str:
+    """读轨迹档末尾 FastAgentEndEvent 的 reason，补进分类依据（失败原因经常只写喺轨迹）。"""
+    try:
+        tp = TRAJ_DIRS.get(tid) or (TRAJ_ROOT / tid)
+        tj = tp / "trajectory.json"
+        if tj.is_file():
+            evs = json.loads(tj.read_text(encoding="utf-8"))
+            for e in reversed(evs):
+                if e.get("type") == "FastAgentEndEvent":
+                    return str(e.get("reason") or "")
+    except Exception:
+        pass
+    return ""
+
+
+def classify_failure(message: str, tid: str):
+    """失败分类：A 类返 ("human", hand, after)；其余一律 ("tech", "", "") —— 默认唔弹人。"""
+    txt = f"{message or ''} {_read_end_reason(tid)}".lower()
+    if any(w in txt for w in HAND_WORDS_SCAN):
+        return "human", "请用手机扫码登录", "扫码登录后我会继续完成剩余步骤"
+    if any(w in txt for w in HAND_WORDS_ACC):
+        return "human", "请登录 / 注册账号（输账号密码或扫码）", "登录后我会继续完成剩余步骤"
+    if any(w in txt for w in HAND_WORDS_OTP):
+        return "human", "请输入验证码 / 过一下人机验证", "验证通过后我会继续"
+    if any(w in txt for w in HAND_WORDS_PAY):
+        return "human", "请完成付款 / 订阅确认", "确认后我会继续"
+    return "tech", "", ""
+
+
+def emit_fail(q, message: str, tid: str, lstats=None, ltot: int = 0) -> None:
+    """失败收尾统一出口：
+    A 类（且仲有接管机会）→ 弹接管卡，user 只做一步，之后续跑；
+    其余 → 唔弹人，直接收工并报清原因。"""
+    lstats = lstats or {}
+    kind, hand, after = classify_failure(message, tid)
+    resumable = RUN.get("round", 0) < MAX_RESUME and (RUN["of"] - int(RUN["used"])) > 0
+    if kind == "human" and resumable:
+        RUN.update(hand=hand, after=after)
+        _pub(q, "human", action="")
+        q.put(("need_hand", {"reason": message or "要你接手一步", "hand": hand, "after": after,
+                             "used": RUN["used"], "of": RUN["of"],
+                             "left": max(0, RUN["of"] - int(RUN["used"])),
+                             "round": RUN["round"] + 1, "max": MAX_RESUME}))
+        q.put(("result", {"success": False, "resumable": True,
+                          "message": f"{hand}（{after}）",
+                          "layer_stats": lstats, "layer_total": ltot}))
+    else:
+        RUN["active"] = False
+        _pub(q, "human", action="")
+        q.put(("needs_human", {"reason": message or "未做到", "hand_scope": "none"}))
+        q.put(("result", {"success": False, "message": message or "未做到",
+                          "layer_stats": lstats, "layer_total": ltot}))
+
+
+# ── 人工接管后续跑（A 类：登录 / 验证码 / 付款，用户做一步后继续）──
+RUN = {"text": "", "used": 0, "of": int(STEPS), "round": 0, "active": False,
+       "note": "", "hand": "", "after": ""}
 MAX_RESUME = int(os.environ.get("QPHONE_RESUME", "3"))
 
 
@@ -466,9 +516,15 @@ def run_resume(q, note: str) -> None:
         return
     RUN["round"] += 1
     left = max(1, RUN["of"] - RUN["used"])
+    hand = RUN.get("hand") or "要你人工做嘅嗰一步"
     prompt = (f"继续完成同一个任务：{RUN['text']}\n"
-              f"用户已经接管处理：{note or '已处理好'}\n"
-              f"请由当前屏幕状态继续，唔好重做已完成嘅步骤。")
+              f"用户只完成咗【{hand}】呢一步"
+              f"{('；佢备注：' + note) if note else ''}。\n"
+              f"任务仲未完成！请先睇当前屏幕（take_screenshot / get_state）评估，"
+              f"继续做剩余步骤"
+              f"{('：' + RUN['after']) if RUN.get('after') else ''}。\n"
+              f"唔好重做【{hand}】，亦唔好当任务已经完成——"
+              f"只有用截图确认目标真系达成先可以调用 complete。")
     q.put(("progress", {"line": f"用户已接手（第 {RUN['round']}/{MAX_RESUME} 次续跑），剩余 {left} 步"}))
     q.put(("layer", {"layer": "L2", "label": f"续跑 · 第 {RUN['round']} 次",
                      "cmds": ["mobilerun run"], "ms": 0, "ok": True, "why": "人工接管后继续"}))
@@ -485,21 +541,8 @@ def run_resume(q, note: str) -> None:
             q.put(("result", {"success": True, "message": message or "续跑做完",
                               "layer_stats": lstats, "layer_total": ltot}))
         else:
-            left2 = max(0, RUN["of"] - RUN["used"])
-            if RUN["round"] < MAX_RESUME and left2 > 0:
-                _pub(q, "human", action="")
-                q.put(("need_hand", {"reason": message or "仲系要人接手", "used": RUN["used"],
-                                     "of": RUN["of"], "left": left2,
-                                     "round": RUN["round"] + 1, "max": MAX_RESUME}))
-                q.put(("result", {"success": False, "resumable": True,
-                                  "message": message or "仲要你接手一下",
-                                  "layer_stats": lstats, "layer_total": ltot}))
-            else:
-                RUN["active"] = False
-                _pub(q, "human", action="")
-                q.put(("needs_human", {"reason": message or "续跑都唔成功"}))
-                q.put(("result", {"success": False, "message": message or "续跑未做到",
-                                  "layer_stats": lstats, "layer_total": ltot}))
+            # 续跑再失败：同样分类收尾（A 类再弹卡，B 类收工报原因）
+            emit_fail(q, message, tid, lstats, ltot)
     except Exception as e:  # noqa: BLE001
         q.put(("needs_human", {"reason": f"续跑出错：{e}"}))
         q.put(("result", {"success": False, "message": str(e)}))

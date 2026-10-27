@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.33</title>
+<title>QPhone 详细设计说明书 v0.34</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -51,10 +51,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.33</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.34</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.33</p>
+<p>版本：v0.34</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -283,8 +283,8 @@ strong{font-weight:700}
 </thead>
 <tbody>
 <tr>
-<td>v0.33</td>
-<td>QPhone 执行模型由 <code>workbuddy/deepseek-v4.1-flash</code> 换 <strong><code>traework/DeepSeek-V4-Pro-Official</code></strong>（A/B 实测 4 选 1：工具调用有效率 100% vs 旧模型 50%，且 6 步内真装好 com.qihoo.browser；glm-5.3 / kimi-k3.1-pro 全套 0 执行，provider 标签可能唔啱）。</td>
+<td>v0.34</td>
+<td><strong>接管场景分类（2026-10-27 老板定案）</strong>：失败唔再一刀切弹人。分 <strong>A 类「人肉步骤」</strong>（登录/注册、验证码/CAPTCHA、付款/订阅、扫码 —— agent 冇凭证冇权限，用户做一步，之后 agent 继续做剩余步骤）同 <strong>B 类「技术失败」</strong>（模型白谂 / 工具坏 / 打转 / 步数尽 —— 唔弹人，直接收工报清原因）。<code>need_hand</code> 事件新增 <code>hand</code>（请你做 X）＋ <code>after</code>（之后我行 Y）字段，壳接管卡显示「请你做：…。其余我行返」；续跑 prompt 由「用户已接管处理」改为「用户<strong>只完成咗【X】</strong>，任务仲未完成，先睇屏幕评估，继续做剩余步骤，唔好当任务已完成，得用截图确认先可以 complete」。分类函数 <code>classify_failure()</code> 读失败 message + 轨迹档尾 <code>FastAgentEndEvent</code>，默认唔弹人。</td>
 <td>C</td>
 <td><span class="nowrap">2026-10-27</span></td>
 </tr>
@@ -1457,7 +1457,29 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <p>口径：<strong>按单计</strong>，唔系按调用次数——一单只会落到一层（短路降级），所以四层百分比加起来 100%（用最大余数法取整，唔会出现 63%+38%=101%）。</p>
 </blockquote>
 <h4>3.4.15 人工接管后续跑</h4>
-<p>以前 L2 一失败就整单收工（例如撞到登录墙、验证码）。现在改成<strong>可暂停可续跑</strong>：</p>
+<p><strong>接管 = 「人肉步骤」委托，唔系任务移交</strong>（2026-10-27 老板定案）：用户只做 agent 物理上 / 权限上做唔到嗰一步，做完 agent 必须自己继续成个任务，唔可以当任务完咗。失败唔再一刀切弹人，按场景分类：</p>
+<table>
+<thead>
+<tr>
+<th>类</th>
+<th>场景</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A 人肉步骤</strong></td>
+<td>登录/注册、验证码/CAPTCHA、付款/订阅、扫码/二维码</td>
+<td>喺 <code>classify_failure()</code> 命中关键词（或轨迹档尾 <code>FastAgentEndEvent</code> 原因）→ 弹接管卡 → 用户做一步 → 续跑</td>
+</tr>
+<tr>
+<td><strong>B 技术失败</strong></td>
+<td>模型白谂 / malformed 工具调用 / 打转 / 步数用尽 / 任务实际已完成但模型报失败</td>
+<td><strong>唔弹人</strong>，直接收工报清原因（<code>needs_human</code> 带 <code>hand_scope:"none"</code>）</td>
+</tr>
+</tbody>
+</table>
+<p><code>need_hand</code> 事件新增字段：<code>hand</code>（请你做 X）、<code>after</code>（之后我行 Y），壳接管卡显示「请你做：…。其余我行返」。</p>
 <table>
 <thead>
 <tr>
@@ -1467,16 +1489,16 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </thead>
 <tbody>
 <tr>
-<td>第一次失败</td>
-<td>服务端记低 <code>RUN = {text, used, of, round, active}</code>，推 <code>need_hand</code>（原因 / 已用步数 / 第几次机会），<code>result</code> 带 <code>resumable: true</code></td>
+<td>第一次失败（A 类）</td>
+<td>服务端记低 <code>RUN = {text, used, of, round, active, hand, after}</code>，推 <code>need_hand</code>（原因 / <code>hand</code> / <code>after</code> / 已用步数 / 第几次机会），<code>result</code> 带 <code>resumable: true</code></td>
 </tr>
 <tr>
 <td>壳</td>
-<td>弹「云机 · 等你接手」卡 + 输入框（可写你处理咗咩）+ 「我已处理好，继续」按钮</td>
+<td>弹「云机 · 等你接手」卡：原因 + <strong>「请你做：X。之后我行 Y。其余我行返」</strong> + 输入框（可备注你做完咗咩）+「我已处理好，继续」按钮。输入框 placeholder 写「做完呢一步（如：已登录）后可留空」</td>
 </tr>
 <tr>
 <td>用户点击</td>
-<td><code>POST /turn/resume {note}</code> → 由<strong>当前画面</strong>续跑，prompt 带「用户已接管处理：…／唔好重做已完成步骤」</td>
+<td><code>POST /turn/resume {note}</code> → 由<strong>当前画面</strong>续跑。prompt 语义：「用户<strong>只完成咗【X】</strong>，任务仲未完成，先睇屏幕评估，继续做剩余步骤，唔好重做【X】、唔好当任务已完成，只有用截图确认目标真系达成先可以 complete」</td>
 </tr>
 <tr>
 <td>步数</td>
@@ -1484,7 +1506,7 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tr>
 <tr>
 <td>上限</td>
-<td>最多 <code>QPHONE_RESUME</code>（默认 3）次；用尽或步数耗尽 → 正常失败收工</td>
+<td>最多 <code>QPHONE_RESUME</code>（默认 3）次；用尽或步数耗尽 → 正常失败收工。B 类一失败就收工，唔计接管次数</td>
 </tr>
 <tr>
 <td>同卡</td>
@@ -1493,6 +1515,7 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tbody>
 </table>
 <p>坑：<code>step</code> 事件由 Mobilerun 自己数，续跑会由 1 重新数，所以壳要 <code>STEP_BASE</code> 加返前面用咗嘅步数。</p>
+<p>权限弹窗（通知/存储/定位等）= <strong>B4，agent 自动应</strong>，唔等用户（印象笔记 ALLOW 实测 agent 自己点咗）。</p>
 <h4>3.4.16 步骤日志（实况窗下方）</h4>
 <p>「边个组件、做咗咩、打出咩」一屏睇完，唔靠猜。</p>
 <table>
