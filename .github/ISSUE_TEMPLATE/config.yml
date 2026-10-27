@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 详细设计说明书
+    url: https://github.com/ShonnQ/qphone-bot-dev/blob/main/docs/详细设计.md
+    about: 程序 / 接口 / 限制，编码以此为准

@@ -1,0 +1,51 @@
+name: 缺陷（PR）
+description: 缺陷 / 回归。单号格式 PR-YYYYMMDD-N（Problem Report，不是 GitHub Pull Request）。用脚本开单。
+title: "PR-YYYYMMDD-N "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        标题必须是 `PR-YYYYMMDD-N 一句话`（例：`PR-20261027-1 步骤日志中途停更`）。
+        **不要手填单号**：
+
+        `./scripts/new-ticket.sh pr "一句话标题"`
+
+        这里 `PR` = Problem Report（缺陷），**唔系** GitHub Pull Request。
+  - type: textarea
+    id: seen
+    attributes:
+      label: 现象
+      description: 实际见到乜；载具（redroid / 天翼云）+ 端口 + 复现步骤。
+    validations:
+      required: true
+  - type: textarea
+    id: expect
+    attributes:
+      label: 期望
+    validations:
+      required: true
+  - type: checkboxes
+    id: layers
+    attributes:
+      label: 影响层
+      options:
+        - label: L0
+        - label: L1a
+        - label: L1b
+        - label: L2
+        - label: 壳 UI / 文档
+  - type: textarea
+    id: ac
+    attributes:
+      label: 验收
+      value: |
+        - [ ] 现象不再出现
+        - [ ] 无回归（L0/L1 命中率、平均步数唔变差）
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 实测证据
+      description: trajectory id / 命令输出 / 日志行（唔好只写「偶发」）。

@@ -1,0 +1,57 @@
+name: 功能（FR）
+description: 新功能 / 改版 / 架构改动。单号格式 FR-YYYYMMDD-N，用 scripts/new-ticket.sh 开单，勿手填。
+title: "FR-YYYYMMDD-N "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        标题必须是 `FR-YYYYMMDD-N 一句话`（例：`FR-20261027-1 接管场景分类`）。
+        **不要手填单号**，用仓库脚本分配：
+
+        `./scripts/new-ticket.sh fr "一句话标题"`
+
+        `FR` = Feature Request。落码门槛：单 + 分支 + PR 三样齐，唔准先改码后补单。
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景
+      description: 为咩要做；老板原话或实测现象（失败率 / steps / 耗时）。
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: 做成怎样
+      description: 目标行为与范围，唔写实现细节。
+    validations:
+      required: true
+  - type: checkboxes
+    id: layers
+    attributes:
+      label: 影响层
+      options:
+        - label: L0 确定性命令（adbd）
+        - label: L1a 无障碍树（agent-device snapshothelper）
+        - label: L1b WebView CDP
+        - label: L2 视觉兜底（Mobilerun + Portal）
+        - label: 壳 UI / 文档
+  - type: textarea
+    id: ac
+    attributes:
+      label: 验收
+      description: 可勾选、可执行嘅断言（带数字：耗时 / 步数 / 包名 / 打印值）。
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 涉及版本
+      placeholder: shell v1.x / serve vX / 详细设计 v0.xx
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 实测证据
+      description: 命令 + 输出 / trajectory id / 截图绝对路径。开单时可以为空，PR 必须填齐。
