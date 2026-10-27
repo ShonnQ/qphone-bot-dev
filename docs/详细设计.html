@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.37</title>
+<title>QPhone 详细设计说明书 v0.38</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -51,10 +51,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.37</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.38</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.37</p>
+<p>版本：v0.38</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -277,6 +277,12 @@ strong{font-weight:700}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.38</td>
+<td><strong>语义路由层落地</strong>（FR-20261027-2）：老板拍板主力 <code>traework/DeepSeek-V4-Pro-Official</code>。<code>layers.py</code> 加 <code>sem_parse()</code>（缓存 → Pro 8 s → Flash 4 s，坏 JSON / 白名单外 / 置信 &lt;0.6 一律交 L2）、<code>sem_execute()</code>（L0 类 intent 组规范讲法复用 <code>l0_try</code>；<code>tap</code> 走 L1b→L1a；<code>input/search</code> 只走 L1b）、<code>sem_try()</code> 挂喺 <code>_route_once</code> 三层规则全 miss 之后、别名自愈 <code>~/.qphone/alias-learned.json</code>、句级缓存 24 h；<code>serve.py</code> <code>TASK_WORDS</code> 补卸载动词 + <code>unclear</code> 先用 <code>sem_parse</code> 判一次 + <code>/layers</code> 加 <code>semantic</code> 段。实测：<code>将淘宝卸咗佢</code> 三层 skip → Pro 3.9 s → L0 55 ms；<code>将360浏览器卸咗佢</code> 第二次 65 ms（缓存）；<code>帮我睇下百度网盘装咗未</code> 39 ms 走 L0 查询。Pro 6 句实测 2.1–27.0 s（复杂句 reasoning 400–800 token）。</td>
+<td>C</td>
+<td><span class="nowrap">2026-10-27</span></td>
+</tr>
 <tr>
 <td>v0.37</td>
 <td><strong>语义路由层（S 层）设计稿</strong>（FR-20261027-2）：老板定案「规则先行，讲法食唔落由 LLM 出语义再派去 L0/L1a/L1b」，L1a/L1b 一样食语义。新增 §3.4.17：S 层位置（三层规则全 miss 才触发，属路由前置唔算第五层）、JSON 契约（intent/app/target/text/params/confidence）、intent→执行器映射表（命令一律本地模板拼，模型唔准出 shell）、校验降级五条、别名自愈（<code>~/.qphone/alias-learned.json</code>）+ 24h 句级缓存、延迟实测（DeepSeek-V4-Flash-Official 2.2–2.6 s / mimo 1.6–3.6 s / glm-5.3-flash 3.9–6.1 s / qwen3.8-flash 超时）、<code>/layers</code> 加 <code>semantic</code> 段。<strong>本版只落设计，未写码</strong>（等拍板 4 项）。</td>
@@ -1609,7 +1615,7 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <p>去噪规则（唔滤就会洗版）：<code>✨🚀🤖👁📁🔧⚙🎯📦</code> 开头嘅 banner、<code>&lt;...&gt;</code> / <code>FastAgent response</code> / <code>Malformed tool-call</code> / <code>Traceback</code> / <code>Attempt N</code> 一律唔入；<code>L0 · …</code> 摘要行已由 layer 行表达，唔重复；连续相同 tag+内容去重；<code>思考</code> 每步只写一次（Mobilerun 会边谂边加长同一段）。</p>
 <p>右栏结构：<code>云机实况</code> → <code>返回/主页/多任务</code> → <code>步骤日志</code>（占满剩余高度、内部滚动；标题右侧保留时间 / 分辨率 / fps）。</p>
 <p><strong>过程行有服务端副本（v0.35，PR-20261027-1）</strong>：以前过程行只活喺本条 SSE 流，页面一刷新（浏览器栏 reload / 预览窗重挂 / 换客户端打开）就全部消失，而卡片照样显示「完成」——观感就系「步骤日志坏咗」。现在服务端 <code>_log_row()</code> 用同一套规则把事件翻译成行，写落 <code>HISTORY</code> 该单嘅 <code>log</code> 数组（上限 400 行，连续相同内容去重），<code>/history</code> 一并带出；壳开页时 <code>slReplayLast()</code> 把<strong>最后一单</strong>嘅过程行重放进 <code>#slBody</code>，首行标 <code>重放 · 上一单「…」嘅过程（页刷新前）· N 行</code>。旧数据冇 <code>log</code> 就出一行 <code>提示 … 服务端未存过程行</code>，唔扮有。本页自己跑单时照旧逐行实时写，重放唔会覆盖已有实时行（<code>#slBody</code> 非空即跳过）。</p>
-<h4>3.4.17 语义路由层（S 层，v0.37 设计稿 · 待拍板）</h4>
+<h4>3.4.17 语义路由层（S 层，v0.38 已落地）</h4>
 <blockquote>
 <p>老板定案方向（2026-10-27）：「规律先行，讲法食唔落就由大模型出语义（意图 + 槽位），再按路由规则派去 L0/L1a/L1b 执行」——<strong>L1a、L1b 一样要食语义</strong>，唔系只有 L0。</p>
 </blockquote>
@@ -1823,13 +1829,76 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <li>唔做多步任务规划（plan）—— 只做「单意图 + 槽位」</li>
 <li>唔准模型直出 adb/shell</li>
 </ul>
-<p><strong>待拍板</strong></p>
+<p><strong>当初 4 项待拍板（已定，见下）</strong></p>
 <ol>
 <li>主力模型：<code>DeepSeek-V4-Flash-Official</code>（稳，2.2–2.6 s）定 <code>mimo-v2.6-flash</code>（快，1.6–3.6 s）</li>
 <li>S 层超时阈值：3.5 s 定 5 s</li>
 <li>句级缓存 TTL：24 h 定唔缓存</li>
 <li>危险 intent（uninstall / clear_data）要不要在壳上多一次「确认」——现取向系<strong>唔要</strong>（确定性动作直接做，靠日志追溯）</li>
 </ol>
+<p><strong>拍板结果（2026-10-27 老板定）</strong></p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>定案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>主力模型</td>
+<td><strong><code>traework/DeepSeek-V4-Pro-Official</code></strong>（老板指定）；超时 8 s</td>
+</tr>
+<tr>
+<td>超时兜底</td>
+<td>超时/调唔通 → 自动降 <code>traework/DeepSeek-V4-Flash-Official</code>（2.2–2.6 s）补一刀；两把都唔得才落 L2</td>
+</tr>
+<tr>
+<td>句级缓存</td>
+<td>24 h（<code>~/.qphone/sem-cache.json</code>，只留最近 200 句）</td>
+</tr>
+<tr>
+<td>危险 intent 确认</td>
+<td><strong>唔加确认</strong>，直接做，靠步骤日志 + <code>/layers.semantic.last</code> 追溯</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Pro 实测（6 句，Qbridge :7863）</strong>：2.1 / 4.4 / 4.4 / 4.7 / 5.5 / <strong>27.0 s</strong>（复杂句 reasoning 400–800 token）。试过 <code>reasoning_effort=minimal</code> 降到 12.3 s、<code>chat_template_kwargs{enable_thinking:false}</code> 降到 10.3 s —— 都未够快，所以<strong>必须有 Flash 兜底</strong>，唔系单靠 Pro。</p>
+<p><strong>落地面（2026-10-27 已实现，<code>layers.py</code>）</strong></p>
+<ul>
+<li><code>sem_parse()</code>：缓存 → Pro（8 s）→ Flash（4 s）；坏 JSON / <code>intent</code> 唔在白名单 / 置信 &lt; 0.6 一律唔赌，交 L2</li>
+<li><code>sem_execute()</code>：<code>open_app / check_installed / uninstall / force_stop / clear_data / back / home / screenshot</code> → 组一句规范讲法交 <code>l0_try()</code>（例如 <code>intent=uninstall, app=淘宝</code> → <code>卸载淘宝</code>），包名解析、断言、<code>final</code> 语义全部复用 L0，唔另写一套；<code>tap</code> → L1b（有 socket 先）→ 唔得转 L1a；<code>input / search</code> → 只走 L1b（IME 未做）</li>
+<li>别名自愈：成功且解析到包名 → 写 <code>~/.qphone/alias-learned.json</code> + 即时 <code>APP_ALIASES[name]=pkg</code></li>
+<li>分类补洞：<code>TASK_WORDS</code> 加「卸／卸咗／删走／移除…」（原来「将淘宝卸咗佢」判唔清）；<code>classify()</code> 判 unclear 时先用 <code>sem_parse</code> 判一次，命中即当任务跑</li>
+<li><code>/layers</code> 加 <code>semantic</code> 段：<code>{enabled, model, fallback, timeout_s, min_conf, cache_ttl_s, learned_aliases, stats, last}</code></li>
+</ul>
+<p><strong>实测（真跑）</strong></p>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>将淘宝卸咗佢</code>（规则三层全 miss）</td>
+<td>三层 skip → S 层 Pro 3.9 s → <code>intent=uninstall app=淘宝</code> → <strong>L0 55 ms</strong>「com.taobao.taobao 未安装，冇嘢可卸载」；步骤日志三行，标签 <code>语义→L0</code></td>
+</tr>
+<tr>
+<td><code>将360浏览器卸咗佢</code></td>
+<td>第二次走缓存：<strong>65 ms 总耗时</strong>（0 模型）</td>
+</tr>
+<tr>
+<td><code>帮我睇下百度网盘装咗未</code></td>
+<td>走新 L0 查询规则：<strong>39 ms</strong>「有装：com.baidu.netdisk」（唔再开 app、唔问模型）</td>
+</tr>
+<tr>
+<td><code>揿一下『网络和互联网』</code></td>
+<td>S 层 <code>tap</code> → L1b 冇文字 → 转 L1a「无障碍树冇呢个控件」（前台唔系设置页），如实 miss</td>
+</tr>
+</tbody>
+</table>
 <h2>4. 用户界面详细设计</h2>
 <h3>4.1 界面结构</h3>
 <p>主界面是壳里的对话。本文不重画这个界面。</p>

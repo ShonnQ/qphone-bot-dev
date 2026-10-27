@@ -276,6 +276,8 @@ TASK_WORDS = ("打开", "开一", "开启", "开下", "帮我开", "关掉", "�
               "暂停", "返回", "回桌面", "拨", "打电话", "复制", "粘贴", "删掉", "删除", "上传",
               # 记录 / 备忘 / 写入类（2026-10-23 补：呢类原来被判成 chat，直接推卸）
               "记入", "记低", "记落", "记录", "记住", "记事", "写低", "写落", "写字", "写入",
+              # 卸载 / 移除类动词（2026-10-27 补：讲「卸咗佢」「删走佢」原来判唔出系任务）
+              "卸", "卸载", "卸掉", "卸咗", "移除", "删走", "删咗", "打走",
               "存入", "存落", "存档", "加入", "新增", "新建", "建个", "开个", "备忘", "笔记",
               "填", "整", "搞", "帮我", "帮手", "同我", "麻烦你")
 CHAT_WORDS = ("你好", "哈佬", "hello", "hi", "咩", "什么", "点解", "为什么", "分别", "有冇", "系咪",
@@ -1332,6 +1334,10 @@ class Handler(BaseHTTPRequestHandler):
             d = dict(LAYERS_DOC)
             d["last_attempts"] = getattr(layers, "LAST_ATTEMPTS", [])
             try:
+                d["semantic"] = layers.semantic_status()
+            except Exception as e:                         # noqa: BLE001
+                d["semantic"] = {"enabled": False, "error": str(e)[:120]}
+            try:
                 d["webview_sockets"] = layers.webview_sockets()
             except Exception:                              # noqa: BLE001
                 d["webview_sockets"] = []
@@ -1464,6 +1470,15 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         # ── 判唔清：反问，等用户拣 ──
+        # ── 判唔清：先用 S 层语义判一次（讲法未有动作词，但语义明显系任务，就照跑）──
+        if verdict["mode"] == "unclear" and mode == "auto":
+            try:
+                p = layers.sem_parse(text)
+            except Exception:                                  # noqa: BLE001
+                p = None
+            if p and p.get("intent") not in (None, "unknown") and (p.get("confidence") or 0) >= layers.SEM_MIN_CONF:
+                verdict = {"mode": "task", "why": f"语义判定 {p.get('intent')}"}
+                emit("intent", {"mode": "task", "why": verdict["why"], "text": text})
         if verdict["mode"] == "unclear":
             _pub(None, "idle")
             hist_add("chat", text="想我帮你做，定系问下？", options=["当任务跑", "就系问下"])

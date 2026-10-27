@@ -208,6 +208,22 @@ def l0_try(text: str) -> dict | None:
     t0 = time.time()
 
     # 1b) 查有冇装某 app（L0 直接查包表，唔使开设置翻页）
+    m = re.search(r"([^\s，。？！]{1,12})\s*(?:装咗未|装左未|装咗没|装了吗|装咗冇|有冇装|有无装|装咗未呀)", t)
+    if m:                                                   # 「百度网盘装咗未」：app 名喺前面
+        name = re.sub(r"^(?:帮我|同我|帮手|睇|看|查|问|试|打开|开)+", "", m.group(1).strip())
+        name = re.sub(r"(app|应用|应用程式|程式)$", "", name, flags=re.I).strip()
+        pkg = resolve_package(name)
+        if pkg and pkg in installed():
+            return trace("L0", f"查有冇装 {name}", [f"pm list packages {pkg}"], t0, True, f"有装：{pkg}")
+        if pkg:
+            return trace("L0", f"查有冇装 {name}", [f"pm list packages {pkg}"], t0, True, f"冇装：{pkg}")
+        hit = [p for p in installed() if name.lower() and name.lower() in p.lower()]
+        if hit:
+            return trace("L0", f"查有冇装 {name}", ["pm list packages"], t0, True, f"有装：{hit[0]}")
+        third = third_party()
+        return trace("L0", f"查有冇装 {name}", ["pm list packages -3"], t0, True,
+                     f"包表冇同名词条；机上第三方 app 有 {len(third)} 个：" + "、".join(third[:6]))
+
     m = re.search(r"(?:有无|有冇|有没有|是否)(?:装|安装|安装咗)?\s*([^\s，。？！]{1,12})", t, re.I)
     if m:
         name = re.sub(r"(app|应用|应用程式|程式)$", "", m.group(1).strip(), flags=re.I)
@@ -832,4 +848,265 @@ def _route_once(text: str, chain, emit):
         if tr.get("ok") or tr.get("final"):
             return tr
         last = tr
+    # 三层规则全 miss → S 层语义解析（规则命中嘅单唔会行到呢度，一毫秒都唔多付）
+    if SEM_ENABLED:
+        try:
+            trs = sem_try(text)
+        except Exception as e:                               # noqa: BLE001
+            trs = None
+            SEM_LAST.update(why=f"语义层异常：{str(e)[:80]}")
+        if trs:
+            fire(trs)
+            LAST_ATTEMPTS.append({"layer": trs.get("layer", "S"), "ok": bool(trs.get("ok")),
+                                  "why": "语义：" + (trs.get("why") or "")})
+            return trs
+        LAST_ATTEMPTS.append({"layer": "S", "ok": False,
+                              "why": SEM_LAST.get("why") or "语义层冇派到执行器（交 L2）"})
     return last if last and last.get("ok") else None
+
+
+# ─────────────────────────────── S 层：语义解析（四层规则全 miss 才触发）
+# 定位：规则先跑，一毫秒都唔多付；只有规则食唔落嘅讲法，才问一次模型，拿「意图 + 槽位」，
+#      再派去 L0 / L1a / L1b 执行。模型只讲「边个、做乜」，命令一律本地模板拼（唔准出 shell）。
+SEM_MODEL = os.environ.get("QPHONE_SEM_MODEL", "traework/DeepSeek-V4-Pro-Official")
+SEM_FALLBACK = os.environ.get("QPHONE_SEM_FALLBACK", "traework/DeepSeek-V4-Flash-Official")
+SEM_TIMEOUT = float(os.environ.get("QPHONE_SEM_TIMEOUT", "8"))
+SEM_FALLBACK_TIMEOUT = float(os.environ.get("QPHONE_SEM_FALLBACK_TIMEOUT", "4"))
+SEM_MIN_CONF = float(os.environ.get("QPHONE_SEM_MIN_CONF", "0.6"))
+SEM_CACHE_TTL = float(os.environ.get("QPHONE_SEM_CACHE_TTL", "86400"))
+SEM_ENABLED = os.environ.get("QPHONE_SEM", "1") not in ("0", "false", "False")
+SEM_URL = (os.environ.get("QPHONE_LLM_URL") or "http://127.0.0.1:7863/v1").rstrip("/")
+SEM_KEY = os.environ.get("QPHONE_LLM_KEY", "local")
+SEM_DIR = os.path.expanduser("~/.qphone")
+SEM_CACHE = os.path.join(SEM_DIR, "sem-cache.json")
+SEM_LEARN = os.path.join(SEM_DIR, "alias-learned.json")
+
+SEM_INTENTS = ("open_app", "check_installed", "uninstall", "force_stop", "clear_data",
+               "back", "home", "screenshot", "tap", "input", "search", "scroll", "unknown")
+
+SEM_LAST: dict = {}
+SEM_STATS = {"cache_hit": 0, "llm": 0, "timeout": 0, "bad_json": 0, "out_of_list": 0, "low_conf": 0, "learned": 0}
+
+_SEM_SYS = (
+    "你系手机命令解析器。用户讲一句粤语/普通话，你只输出一行 JSON，唔准解释、唔准加代码块：\n"
+    '{"intent":"open_app|check_installed|uninstall|force_stop|clear_data|back|home|screenshot|tap|input|search|scroll|unknown",'
+    '"app":"","target":"","text":"","confidence":0.0}\n'
+    "规则：app 填中文应用名（原话点讲就点填，唔好翻译）；tap 填要点的控件文字；"
+    "input/search 填要打入去的文字；讲唔清就 intent=unknown、confidence 低。"
+)
+
+
+def _sem_http(text: str, model: str, timeout: float) -> str:
+    """一次 OpenAI 兼容调用（绕开环境代理），返模型原文。"""
+    payload = json.dumps({"model": model,
+                          "messages": [{"role": "system", "content": _SEM_SYS},
+                                       {"role": "user", "content": text}],
+                          "max_tokens": 120, "temperature": 0}).encode()
+    req = urllib.request.Request(SEM_URL + "/chat/completions", data=payload,
+                                 headers={"Content-Type": "application/json",
+                                          "Authorization": "Bearer " + (SEM_KEY or "local")})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(req, timeout=timeout) as r:
+        d = json.loads(r.read())
+    return (d.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+
+
+def _sem_cache_get(text: str):
+    try:
+        if not os.path.isfile(SEM_CACHE):
+            return None
+        d = json.load(open(SEM_CACHE, encoding="utf-8"))
+        hit = d.get(text)
+        if hit and time.time() - float(hit.get("ts") or 0) < SEM_CACHE_TTL:
+            return hit.get("parsed")
+    except Exception:                                        # noqa: BLE001
+        return None
+    return None
+
+
+def _sem_cache_put(text: str, parsed: dict) -> None:
+    try:
+        os.makedirs(SEM_DIR, exist_ok=True)
+        d = {}
+        if os.path.isfile(SEM_CACHE):
+            d = json.load(open(SEM_CACHE, encoding="utf-8"))
+        d[text] = {"ts": time.time(), "parsed": parsed}
+        if len(d) > 200:                                     # 只留最近 200 句
+            for k in sorted(d, key=lambda x: d[x].get("ts", 0))[:-200]:
+                d.pop(k, None)
+        json.dump(d, open(SEM_CACHE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
+def _learn_alias(name: str, pkg: str) -> None:
+    """语义命中并执行成功 → 记住「中文名 → 包名」，下次规则直接命中，0 模型。"""
+    name, pkg = (name or "").strip(), (pkg or "").strip()
+    if not name or not pkg:
+        return
+    try:
+        os.makedirs(SEM_DIR, exist_ok=True)
+        d = {}
+        if os.path.isfile(SEM_LEARN):
+            d = json.load(open(SEM_LEARN, encoding="utf-8"))
+        if d.get(name) == pkg:
+            return
+        d[name] = pkg
+        json.dump(d, open(SEM_LEARN, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+        APP_ALIASES[name] = pkg                              # 即时生效
+        SEM_STATS["learned"] += 1
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
+def _load_learned() -> None:
+    try:
+        if os.path.isfile(SEM_LEARN):
+            for k, v in (json.load(open(SEM_LEARN, encoding="utf-8")) or {}).items():
+                if isinstance(k, str) and isinstance(v, str) and v:
+                    APP_ALIASES.setdefault(k, v)
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
+def sem_parse(text: str):
+    """规则解析：主模型超时就降 Flash 补一刀；坏 JSON / 低置信 一律唔赌。"""
+    hit = _sem_cache_get(text)
+    if hit:
+        SEM_STATS["cache_hit"] += 1
+        SEM_LAST.update(intent=hit.get("intent"), app=hit.get("app"), target=hit.get("target"),
+                        confidence=hit.get("confidence"), model="cache", ms=0, why="命中句级缓存")
+        return hit
+    for model, to in ((SEM_MODEL, SEM_TIMEOUT), (SEM_FALLBACK, SEM_FALLBACK_TIMEOUT)):
+        if not model:
+            continue
+        t0 = time.time()
+        try:
+            raw = _sem_http(text, model, to)
+        except Exception as e:                               # noqa: BLE001
+            SEM_STATS["timeout"] += 1
+            SEM_LAST.update(model=model, ms=now_ms() - int(t0 * 1000), why=f"{model} 调唔通：{str(e)[:60]}")
+            continue
+        ms = now_ms() - int(t0 * 1000)
+        m = re.search(r"\{.*\}", raw, re.S)
+        if not m:
+            SEM_STATS["bad_json"] += 1
+            SEM_LAST.update(model=model, ms=ms, why=f"{model} 冇吐 JSON")
+            continue
+        try:
+            p = json.loads(m.group(0))
+        except json.JSONDecodeError:
+            SEM_STATS["bad_json"] += 1
+            SEM_LAST.update(model=model, ms=ms, why=f"{model} JSON 解唔到")
+            continue
+        intent = str(p.get("intent") or "").strip().lower()
+        try:
+            conf = float(p.get("confidence") or 0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        parsed = {"intent": intent, "app": str(p.get("app") or "").strip(),
+                  "target": str(p.get("target") or "").strip(), "text": str(p.get("text") or "").strip(),
+                  "confidence": conf}
+        SEM_STATS["llm"] += 1
+        if intent not in SEM_INTENTS:
+            SEM_STATS["out_of_list"] += 1
+            SEM_LAST.update(model=model, ms=ms, why=f"intent「{intent}」唔在白名单", **parsed)
+            continue
+        if conf < SEM_MIN_CONF:
+            SEM_STATS["low_conf"] += 1
+            SEM_LAST.update(model=model, ms=ms, why=f"置信 {conf:.2f} < {SEM_MIN_CONF}", **parsed)
+            continue
+        SEM_LAST.update(model=model, ms=ms, why="解析成功", **parsed)
+        _sem_cache_put(text, parsed)
+        return parsed
+    return None
+
+
+_SEM_TEXT = {"open_app": "打开{app}", "check_installed": "有无装{app}", "uninstall": "卸载{app}",
+             "force_stop": "关掉{app}", "clear_data": "清{app}数据", "back": "返回",
+             "home": "回桌面", "screenshot": "截图"}
+
+
+def sem_execute(p: dict):
+    """把语义结果派去 L0 / L1a / L1b 嘅既有执行器；派唔到就返 None（交 L2）。"""
+    intent = (p or {}).get("intent") or ""
+    app, target, txt = p.get("app") or "", p.get("target") or "", p.get("text") or ""
+    t0 = time.time()
+
+    if intent in _SEM_TEXT:
+        phrase = _SEM_TEXT[intent].format(app=app)
+        tr = l0_try(phrase)
+        if tr and tr.get("ok") and app:
+            _learn_alias(app, resolve_package(app))
+        if tr:
+            tr["semantic"] = {"intent": intent, "app": app, "confidence": p.get("confidence"),
+                              "from": phrase}
+            return tr
+        return None
+
+    if intent == "tap" and target:
+        tries = []
+        if webview_sockets():
+            t1 = l1b_try("点" + target)                       # 网页优先（41–56 ms）
+            if t1 and t1.get("ok"):
+                t1["semantic"] = {"intent": intent, "target": target, "confidence": p.get("confidence")}
+                return t1
+            if t1:
+                tries.append(t1)
+        t2 = l1a_try("点" + target)                          # 原生控件（无障碍树）
+        if t2 and t2.get("ok"):
+            t2["semantic"] = {"intent": intent, "target": target, "confidence": p.get("confidence")}
+            return t2
+        if t2:
+            tries.append(t2)
+        best = tries[-1] if tries else None                   # 两层都唔得：返最后一个 miss（why 最具体）
+        if best:
+            best["semantic"] = {"intent": intent, "target": target, "confidence": p.get("confidence")}
+        return best
+
+    if intent in ("input", "search"):
+        if not txt:
+            SEM_LAST["why"] = "input/search 冇 text"
+            return None
+        tr = l1b_try(f"输入「{txt}」落") if webview_sockets() else None
+        if tr:
+            tr["semantic"] = {"intent": intent, "text": txt, "confidence": p.get("confidence")}
+            return tr
+        SEM_LAST["why"] = f"{intent} 要 WebView socket / IME（本版未做 IME）"
+        return None
+
+    SEM_LAST["why"] = f"intent「{intent}」本版冇执行器（交 L2）"
+    return None
+
+
+def sem_try(text: str):
+    """S 层入口：解析 + 执行；返 trace（带 semantic 字段 + 实际执行层），派唔到返 None。"""
+    if not SEM_ENABLED:
+        return None
+    p = sem_parse(text)
+    if not p:
+        return None
+    tr = sem_execute(p)
+    if not tr:
+        return None
+    tr["label"] = f"语义→{tr.get('layer')} · {tr.get('label')}"
+    tr["why"] = (tr.get("why") or "") + f"｜语义 {p.get('intent')} {p.get('app') or p.get('target') or p.get('text') or ''}".strip()
+    return tr
+
+
+def semantic_status() -> dict:
+    return {"enabled": SEM_ENABLED, "model": SEM_MODEL, "fallback": SEM_FALLBACK,
+            "timeout_s": SEM_TIMEOUT, "fallback_timeout_s": SEM_FALLBACK_TIMEOUT,
+            "min_conf": SEM_MIN_CONF, "cache_ttl_s": SEM_CACHE_TTL,
+            "learned_aliases": _learned_count(),
+            "stats": dict(SEM_STATS), "last": dict(SEM_LAST)}
+
+
+def _learned_count() -> int:
+    try:
+        return len(json.load(open(SEM_LEARN, encoding="utf-8")) or {})
+    except Exception:                                        # noqa: BLE001
+        return 0
+
+
+_load_learned()
