@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.34</title>
+<title>QPhone 详细设计说明书 v0.35</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -51,10 +51,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.34</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.35</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.34</p>
+<p>版本：v0.35</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -282,6 +282,12 @@ strong{font-weight:700}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.35</td>
+<td><strong>步骤日志过程行加服务端副本</strong>（PR-20261027-1）：过程行原只活喺本条 SSE，页面一刷新就全空而卡片照样「完成」。新增 <code>_log_row()</code>（同壳同一套规则翻译事件）+ <code>_log_push()</code> 写落 <code>HISTORY.&lt;单&gt;.log</code>（上限 400 行、连续相同去重），<code>/history</code> 带出；壳 <code>slReplayLast()</code> 开页重放<strong>最后一单</strong>，首行标 <code>重放</code>；旧数据出「未存过程行」提示，唔扮有。</td>
+<td>C</td>
+<td><span class="nowrap">2026-10-27</span></td>
+</tr>
 <tr>
 <td>v0.34</td>
 <td><strong>接管场景分类（2026-10-27 老板定案）</strong>：失败唔再一刀切弹人。分 <strong>A 类「人肉步骤」</strong>（登录/注册、验证码/CAPTCHA、付款/订阅、扫码 —— agent 冇凭证冇权限，用户做一步，之后 agent 继续做剩余步骤）同 <strong>B 类「技术失败」</strong>（模型白谂 / 工具坏 / 打转 / 步数尽 —— 唔弹人，直接收工报清原因）。<code>need_hand</code> 事件新增 <code>hand</code>（请你做 X）＋ <code>after</code>（之后我行 Y）字段，壳接管卡显示「请你做：…。其余我行返」；续跑 prompt 由「用户已接管处理」改为「用户<strong>只完成咗【X】</strong>，任务仲未完成，先睇屏幕评估，继续做剩余步骤，唔好当任务已完成，得用截图确认先可以 complete」。分类函数 <code>classify_failure()</code> 读失败 message + 轨迹档尾 <code>FastAgentEndEvent</code>，默认唔弹人。</td>
@@ -1561,6 +1567,7 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </table>
 <p>去噪规则（唔滤就会洗版）：<code>✨🚀🤖👁📁🔧⚙🎯📦</code> 开头嘅 banner、<code>&lt;...&gt;</code> / <code>FastAgent response</code> / <code>Malformed tool-call</code> / <code>Traceback</code> / <code>Attempt N</code> 一律唔入；<code>L0 · …</code> 摘要行已由 layer 行表达，唔重复；连续相同 tag+内容去重；<code>思考</code> 每步只写一次（Mobilerun 会边谂边加长同一段）。</p>
 <p>右栏结构：<code>云机实况</code> → <code>返回/主页/多任务</code> → <code>步骤日志</code>（占满剩余高度、内部滚动；标题右侧保留时间 / 分辨率 / fps）。</p>
+<p><strong>过程行有服务端副本（v0.35，PR-20261027-1）</strong>：以前过程行只活喺本条 SSE 流，页面一刷新（浏览器栏 reload / 预览窗重挂 / 换客户端打开）就全部消失，而卡片照样显示「完成」——观感就系「步骤日志坏咗」。现在服务端 <code>_log_row()</code> 用同一套规则把事件翻译成行，写落 <code>HISTORY</code> 该单嘅 <code>log</code> 数组（上限 400 行，连续相同内容去重），<code>/history</code> 一并带出；壳开页时 <code>slReplayLast()</code> 把<strong>最后一单</strong>嘅过程行重放进 <code>#slBody</code>，首行标 <code>重放 · 上一单「…」嘅过程（页刷新前）· N 行</code>。旧数据冇 <code>log</code> 就出一行 <code>提示 … 服务端未存过程行</code>，唔扮有。本页自己跑单时照旧逐行实时写，重放唔会覆盖已有实时行（<code>#slBody</code> 非空即跳过）。</p>
 <h2>4. 用户界面详细设计</h2>
 <h3>4.1 界面结构</h3>
 <p>主界面是壳里的对话。本文不重画这个界面。</p>

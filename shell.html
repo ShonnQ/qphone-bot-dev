@@ -1175,6 +1175,21 @@ function slAdd(tag, text, cls){
   b.scrollTop = b.scrollHeight;
 }
 
+// 页载入 / 刷新：上一单嘅过程行由服务端（/history 的 log）重放，唔好留空白扮冇发生过
+function slReplayLast(items){
+  const b = $("slBody"); if(!b || b.childElementCount) return;   // 本页已经有实时行就唔覆盖
+  const tasks = (items || []).filter(x => x.kind === "task");
+  const t = tasks[tasks.length - 1];
+  if(!t) return;
+  const log = Array.isArray(t.log) ? t.log : [];
+  if(!log.length){
+    slAdd("提示", "上一单「" + String(t.text || "").slice(0, 16) + "」喺本页之前跑完，服务端未存过程行", "");
+    return;
+  }
+  slAdd("重放", "上一单「" + String(t.text || "").slice(0, 20) + "」嘅过程（页刷新前）· " + log.length + " 行", "");
+  log.forEach(r => slAdd(r.tag || "LOG", r.text || "", r.cls || ""));
+}
+
 // SSE 消费：/turn 同 /turn/resume 共用
 async function pump(resp, text){
   const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = "";
@@ -1416,6 +1431,7 @@ async function loadHistory(){
     if(h.of) STEP_OF = h.of;
     (h.items || []).forEach(renderHist);
     emptyHint();
+    slReplayLast(h.items || []);
     paint(h.state || {phase:"idle"});
   }catch(_){ paint({phase:"idle"}); }
 }

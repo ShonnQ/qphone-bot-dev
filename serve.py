@@ -90,7 +90,7 @@ def layer_bump(k: str):
 # ---- 会话历史（刷新 / 断线都唔会消失）----
 HISTORY: list[dict] = []
 HIST_LOCK = threading.Lock()
-CURRENT_TASK = {"id": ""}
+CURRENT_TASK = {"id": "", "layer": "", "think_step": -1}
 
 
 def hist_add(kind: str, **kw) -> dict:
@@ -169,6 +169,84 @@ def _track(line: str, q) -> None:
 
 
 PROXY_URL = os.environ.get("QPHONE_PROXY_URL", "http://127.0.0.1:8645")
+
+
+# ── 步骤日志：服务端权威副本（壳按同一套规则实时写，页刷新后由这里重放）──
+def _log_row(event: str, o: dict, text: str = ""):
+    """把事件翻译成一行步骤日志 -> (tag, text, cls)；唔值得记就返 None。"""
+    if event == "task_started":
+        return ("任务", "收到：" + (text or ""), "")
+    if event == "resume_started":
+        return ("续跑", f"第 {o.get('round', 1)} 次续跑（已用 {o.get('base', 0)}/{o.get('of', 0)} 步）", "l2")
+    if event == "layer":
+        cmds = "  ".join(c for c in (o.get("cmds") or []) if c)
+        txt = ("跳过 · " if o.get("skip") else "") + (o.get("label") or "")
+        if cmds:
+            txt += "  ▸ " + cmds
+        if o.get("ms"):
+            txt += f"  · {o['ms']} ms"
+        if o.get("why") and not o.get("skip"):
+            txt += "  · " + str(o["why"])[:120]
+        return (o.get("layer") or "L?", txt[:300], str(o.get("layer") or "").lower() + ("" if o.get("ok") else " bad"))
+    if event == "activity":
+        if CURRENT_TASK.get("layer") != "L2":       # 动作 / 思考 只喺 L2 有意义（同壳一致）
+            return None
+        act = str(o.get("action") or "")
+        if act:
+            return ("动作", act[:300], "l2")
+        if o.get("phase") == "think" and o.get("thought"):
+            step = o.get("step") or 0
+            if step == CURRENT_TASK.get("think_step"):
+                return None
+            CURRENT_TASK["think_step"] = step
+            return ("思考", str(o["thought"])[:300], "l2")
+        if o.get("phase") == "step":
+            CURRENT_TASK["think_step"] = -1
+        return None
+    if event == "progress":
+        ln = re.sub(r"^[\s·]+", "", str(o.get("line") or ""))
+        m = re.match(r"^🔄\s*Step (\d+)/(\d+)", ln)
+        if m:
+            return ("步", f"{m.group(1)} / {m.group(2)}", "l2")
+        if re.match(r"^(Malformed|Attempt \d+ failed|Error during task|Error code:\s*\d+|Traceback)", ln):
+            return ("异常", ln.replace("❌", "")[:300], "bad")
+        noise = (not ln
+                 or re.match(r"^(L0|L1a|L1b|L2)\s*·", ln)
+                 or re.match(r"^执行层未接得住", ln)
+                 or re.match(r"^(✨|🚀|🤖|👁|📁|🔧|⚙|🎯|📦|💡|\[PostHog\])", ln)
+                 or re.match(r"^(<|FastAgent response|Tool results)", ln)
+                 or re.search(r"</?(error|result|name|function|parameter|invoke|calls)", ln))
+        return None if noise else ("LOG", ln[:300], "")
+    if event == "need_hand":
+        return ("接手", f"{o.get('reason') or '要人处理'} · 已用 {o.get('used', '?')}/{o.get('of', '?')} 步", "human")
+    if event == "needs_human":
+        return ("失败", str(o.get("reason") or "")[:300], "bad")
+    if event == "result":
+        ok = bool(o.get("success"))
+        return ("完成" if ok else "失败", str(o.get("message") or "")[:300], "ok" if ok else "bad")
+    if event == "trajectory":
+        return ("轨迹", "截图序列已存：" + str(o.get("id") or ""), "")
+    return None
+
+
+def _log_push(event: str, o: dict, text: str = "") -> None:
+    """写落当前单嘅 history.log；刷新后 /history 带出嚟给壳重放。"""
+    row = _log_row(event, o, text)
+    if not row:
+        return
+    tid = CURRENT_TASK.get("id") or ""
+    if not tid:
+        return
+    with HIST_LOCK:
+        for it in reversed(HISTORY):
+            if it.get("kind") == "task" and it.get("id") == tid:
+                log = it.setdefault("log", [])
+                if log and log[-1].get("text") == row[1]:
+                    return
+                log.append({"tag": row[0], "text": row[1], "cls": row[2]})
+                del log[:-400]
+                return
+
 
 
 def _proxy_up() -> bool:
@@ -385,6 +463,7 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
     """跑 Mobilerun，把输出翻译成壳认嘅事件。"""
     started = time.time()
     route = llm_route()
+    CURRENT_TASK["layer"], CURRENT_TASK["think_step"] = "", -1     # 每单重置（动作/思考 只喺 L2 记）
     _pub(q, "turn", step=0, of=0, thought="", action="")   # 每单清零，唔累计上一单步数
 
     # ── 先试确定性三层（L0 → L1a → L1b）；全唔中才落 L2 视觉 ──
@@ -395,6 +474,7 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
         q.put(("progress", {"line": f"L0–L1b 路由异常：{e}"}))
     if tr and (tr.get("ok") or tr.get("final")):
         ok = bool(tr.get("ok"))
+        CURRENT_TASK["layer"] = tr["layer"]
         detail = f"{tr['layer']} · {tr['label']} · {tr['ms']} ms" + (f" · {tr['why']}" if tr.get("why") else "")
         q.put(("progress", {"line": detail}))
         _pub(q, "step", step=1, of=1, action=f"{tr['layer']} {tr['label']}")
@@ -415,6 +495,7 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
     q.put(("layer", {"layer": "L2", "label": "转视觉（Mobilerun）", "cmds": ["mobilerun run"],
                      "ms": 0, "ok": True, "why": why}))
     lstats, ltot = layer_bump("L2")
+    CURRENT_TASK["layer"] = "L2"
     RUN.update(text=text, used=0, of=int(STEPS), round=0, active=True, note="")
     try:
         success, message, tid, used = _exec_l2(q, text, int(STEPS), started)
@@ -1307,6 +1388,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 data = dict(data)
                 data.setdefault("kind", KIND2.get(event, event))
+                _log_push(event, data, RUN["text"])
                 try:
                     self.wfile.write(f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode())
                     self.wfile.flush()
@@ -1354,6 +1436,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             data = dict(data)
             data.setdefault("kind", KIND.get(event, event))
+            _log_push(event, data, text)
             try:
                 self.wfile.write(f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode())
                 self.wfile.flush()
@@ -1399,7 +1482,7 @@ class Handler(BaseHTTPRequestHandler):
 
         tid = uuid.uuid4().hex[:8]
         CURRENT_TASK["id"] = tid
-        hist_add("task", id=tid, text=text, phase="running", step=0, of=int(STEPS), msg="", detail="")
+        hist_add("task", id=tid, text=text, phase="running", step=0, of=int(STEPS), msg="", detail="", log=[])
         emit("task_started", {"id": tid, "of": int(STEPS)})
 
         q: "queue.Queue[tuple[str, dict]]" = queue.Queue()
