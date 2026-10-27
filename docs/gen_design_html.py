@@ -105,8 +105,7 @@ def main() -> int:
 <style>{load_theme()}</style>
 </head>
 <body>
-<div class="stars"></div>
-<div class="stars--twinkle"></div>
+<div class="cosmos" aria-hidden="true"><div class="sun"></div><div class="beam"></div><div class="beam-core"></div></div>
 <div class="wrap">
 {body}
 </div></body></html>
