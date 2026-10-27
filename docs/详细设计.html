@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.32</title>
+<title>QPhone 详细设计说明书 v0.33</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -51,10 +51,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.32</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.33</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.32</p>
+<p>版本：v0.33</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -282,6 +282,12 @@ strong{font-weight:700}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.33</td>
+<td>QPhone 执行模型由 <code>workbuddy/deepseek-v4.1-flash</code> 换 <strong><code>traework/DeepSeek-V4-Pro-Official</code></strong>（A/B 实测 4 选 1：工具调用有效率 100% vs 旧模型 50%，且 6 步内真装好 com.qihoo.browser；glm-5.3 / kimi-k3.1-pro 全套 0 执行，provider 标签可能唔啱）。</td>
+<td>C</td>
+<td><span class="nowrap">2026-10-27</span></td>
+</tr>
 <tr>
 <td>v0.32</td>
 <td>修 <strong>步骤日志中途停更</strong>（<code>pump()</code> 里面对 <code>🔄 Step</code> 用了 <code>return</code>，直接结束整条 SSE 消费循环 —— 第一行步数就断流，后面 result / 接手卡全部收唔到）；异常行（malformed 工具调用 / Attempt failed / Error code）由「噪音滤走」改为 <code>异常</code> 红标显示；同一句唔理标签只写一次；<code>now</code> 在 <code>done/human</code> 时讲「做完 / 卡住 · 要人」而唔再盖成层名。</td>
