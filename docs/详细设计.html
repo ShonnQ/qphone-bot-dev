@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone Bot 详细设计 v0.39</title>
+<title>QPhone Bot 详细设计 v0.40</title>
 <style>/* ============================================================================
    ShonnQ Corp · 默认视觉主题（科技简约 · 暗底星空）
    v1.0 · 2026-10-27 · 正本
@@ -236,7 +236,7 @@ a:hover{border-bottom-color:var(--acc)}
 <header class="hero">
   <div class="kicker">ShonnQ Corp · 详细设计</div>
   <h1>QPhone Bot 详细设计</h1>
-  <div class="docmeta"><span>版本：v0.39</span>
+  <div class="docmeta"><span>版本：v0.40</span>
   <span>日期：2026-10-23</span>
   <span>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></span></div>
 </header>
@@ -277,7 +277,40 @@ a:hover{border-bottom-color:var(--acc)}
 </table>
 </section><section class="card"><h2>2. 综合描述</h2>
 <h3>2.1 系统目标</h3>
-<p>人在对话里交代一件事。事由控制程序在云 Android 上做完。卡住或做完，才回到对话。屏幕不是主界面。</p>
+<p><strong>一句话</strong>：一部 24×7 嘅云 Android 手机 + 三条任务。人讲一句，云机做完，回一句<strong>有证据</strong>嘅结果。屏幕不是主界面。</p>
+<p><strong>要跑通嘅就三条</strong>（详 <code>docs/落地目标清单.md</code>，2026-10-27 定稿，唔再加）</p>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>场景</th>
+<th>判定（adb 机核，唔靠模型自述）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>G1</strong></td>
+<td>开音乐 App → 目标歌单 → 指定歌 → 点播</td>
+<td><code>dumpsys media_session</code>：state = PLAYING，且 title 命中歌名</td>
+</tr>
+<tr>
+<td><strong>G2</strong></td>
+<td>只有移动端嘅 App → 发带图动态（Soul 只系例子）</td>
+<td>回「我的 → 动态」列表，snapshot 命中本次文字 + 带图</td>
+</tr>
+<tr>
+<td><strong>G3</strong></td>
+<td>教育类 App → 做题 / 考试</td>
+<td>结果页见到得分 / 已交卷，或列表状态 未做 → 已完成</td>
+</tr>
+</tbody>
+</table>
+<p><strong>三条共同底线</strong><br>
+1. 判定一律 adb 机核（<code>media_session</code> / snapshot 文本 / 列表状态），<strong>唔信模型讲「做完」</strong><br>
+2. 有确定性路径就唔落 L2；落 L2 要有步数上限<br>
+3. 登录、验证码、滑块、人脸 —— 一律弹接管，程序唔硬闯</p>
+<p><strong>唔喺目标内</strong>（防止范围再膨胀）：有网页 / 有 API 嘅平台（走 API，唔用云机）· 听写口语拍照上传（云机冇麦克风、冇摄像头）· 主观题代写 · 「咩都做到」嘅通用 agent。</p>
+<p><strong>共同卡口</strong>：三个场景都要登录（手机号 + 验证码），且都系新设备异地登录。所以第一步系「登录态准备」，唔系写码。</p>
 <h3>2.2 系统概述</h3>
 <p>三块，调用方向固定。</p>
 <table>
@@ -1633,6 +1666,11 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.40</td>
+<td>§2.1 系统目标重写：一句话 + 三条落地场景（G1/G2/G3）+ 三条底线 + 唔做清单 + 登录态卡口；新增 <code>docs/落地目标清单.md</code> 定稿</td>
+<td>10-27</td>
+</tr>
 <tr>
 <td>v0.39</td>
 <td>装应用快路径（18→5 步）+ 查询类结论排头 + 坐标叠层 + 附录 C L0 能力清单（§3.4.18、§3.4.14、附录 C）</td>
