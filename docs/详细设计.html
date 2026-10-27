@@ -58,6 +58,36 @@ body::after{
   background-size:800px 800px;background-repeat:repeat;opacity:.75;
 }
 
+/* ── 右上射光（同公司全景：sun + beam + beam-core，mix-blend screen，静态唔闪） ── */
+.cosmos{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+.cosmos .sun{
+  position:absolute;right:-16vw;top:-30vh;width:52vw;height:52vw;border-radius:50%;
+  background:radial-gradient(circle,rgba(230,248,255,.30) 0%,rgba(160,225,255,.13) 24%,transparent 62%);
+  filter:blur(14px);mix-blend-mode:screen;
+}
+.cosmos .beam{
+  position:absolute;right:-26%;top:-40%;width:130vw;height:190vh;transform:rotate(20deg);
+  background:linear-gradient(97deg,
+    rgba(190,238,255,0) 30%,
+    rgba(190,238,255,.05) 40%,
+    rgba(215,248,255,.11) 47%,
+    rgba(235,252,255,.17) 50%,
+    rgba(215,248,255,.10) 53%,
+    rgba(190,238,255,.045) 60%,
+    rgba(190,238,255,0) 70%);
+  filter:blur(18px);mix-blend-mode:screen;
+}
+.cosmos .beam-core{
+  position:absolute;right:-22%;top:-40%;width:118vw;height:190vh;transform:rotate(20deg);
+  background:linear-gradient(97deg,
+    rgba(255,255,255,0) 46.5%,
+    rgba(255,255,255,.07) 48.6%,
+    rgba(255,255,255,.13) 50%,
+    rgba(255,255,255,.07) 51.4%,
+    rgba(255,255,255,0) 53.5%);
+  filter:blur(7px);mix-blend-mode:screen;
+}
+
 /* ── 极淡 HUD 网格（照抄公司全景：36px / .016） ── */
 body::before{
   content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
@@ -66,8 +96,8 @@ body::before{
     linear-gradient(90deg,rgba(255,255,255,.016) 1px,transparent 1px);
   background-size:36px 36px;
 }
-/* ── 顶部一线光 ── */
-body::after{
+/* ── 顶部一线光（用 html::after，唔同星场抢 body::after） ── */
+html::after{
   content:"";position:fixed;left:0;right:0;top:0;height:1px;z-index:2;pointer-events:none;
   background:linear-gradient(90deg,transparent,rgba(46,230,201,.55),rgba(120,180,255,.35),transparent);
 }
@@ -179,7 +209,7 @@ a:hover{border-bottom-color:var(--acc)}
 }
 @media print{
   body{background:#fff;color:#111}
-  body::before,body::after,.cosmos{display:none}
+  body::before,body::after,html::after,.cosmos{display:none}
   h1{color:#111;-webkit-text-fill-color:#111}
   th{background:#f3f6f8;color:#111}
   td,th{border-color:#d5dce2}
