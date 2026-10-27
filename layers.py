@@ -90,6 +90,8 @@ APP_ALIASES = {
 
 # 常见第三方 app（包名固定，查有无装好准；唔喺表、又唔喺机上一律当「唔识」）
 APP_EXTRA = {
+    "快手极速版": "com.kuaishou.nebula",
+    "百度贴吧": "com.baidu.tieba", "贴吧": "com.baidu.tieba",
     "印象笔记": "com.yinxiang", "evernote": "com.evernote",     # 国行包名系 com.yinxiang
     "应用宝": "com.tencent.android.qqdownloader", "腾讯应用宝": "com.tencent.android.qqdownloader",
     "qqdownload": "com.tencent.android.qqdownloader",
@@ -147,6 +149,10 @@ def resolve_package(word: str) -> str:
     for k in sorted(APP_ALIASES, key=len, reverse=True):
         if w == k or (w.startswith(k) and len(w) - len(k) <= 2):
             return APP_ALIASES[k]
+    # 语气词剥多咗（「百度贴吧」被 clean 成「百度贴」）→ 用别名做前缀补回
+    for k in sorted(APP_ALIASES, key=len, reverse=True):
+        if k.startswith(w) and len(k) - len(w) <= 2:
+            return APP_ALIASES[k]
     pkgs = [l.split(":", 1)[-1].strip() for l in sh("pm list packages -3").splitlines()]
     pkgs += [l.split(":", 1)[-1].strip() for l in sh("pm list packages").splitlines()]
     for p in pkgs:
@@ -202,6 +208,93 @@ def open_app(pkg: str) -> tuple[bool, str, str]:
         if fg_package() == pkg:
             return True, f"{int((time.time()-t0)*1000)}ms 到前台", f"am start -W -n {comp}"
     return False, f"前台仍系 {fg_package() or '未知'}", f"am start -W -n {comp}"
+
+
+def install_target(text: str) -> tuple:
+    """「去下载安装百度贴吧并打开佢」→ ("百度贴吧", pkg)。抽名唯一入口，唔好各处自己写 regex。"""
+    m = re.search(r"(?:下载|安装|装)\s*(?:一个|个)?\s*([^\s，。？！]{1,14})", text or "")
+    if not m:
+        return "", ""
+    raw = re.split(r"(?:并|然後|然后|再|之后|跟住|顺便|，|,)", m.group(1))[0]
+    raw = re.sub(r"^(?:下载|安装|装|一个|个)+", "", raw).strip()
+    name = _clean_app_name(raw)
+    return name, resolve_package(name)
+
+
+# 商店「搜索页」activity：直接落到搜索框（省掉开屏广告 + 翻抽屉 + 点搜索）
+STORE_SEARCH_ACT = {
+    "com.tencent.android.qqdownloader": "com.tencent.nucleus.search.SearchActivity",
+}
+
+# 中文输入：ADBKeyBoard（broadcast 收 unicode）；冇装就退返 input text（只有 ASCII 得）
+ADBKB_IME = "com.android.adbkeyboard/.AdbIME"
+
+
+def input_ime_ready() -> bool:
+    return "adbkeyboard" in sh("settings get secure default_input_method").strip().lower()
+
+
+def input_text(text: str) -> tuple:
+    """落字：中文靠 ADBKeyBoard 广播，ASCII 都可以退化 input text。"""
+    if input_ime_ready():
+        sh("am broadcast -a ADB_CLEAR_TEXT")
+        out = sh(f"am broadcast -a ADB_INPUT_TEXT --es msg '{text}'")
+        return "Broadcast completed" in out, out.strip()[:80]
+    out = sh(f"input text '{text}'")
+    return bool(out.strip()) or True, out.strip()[:80]
+
+
+def open_store_search(pkg: str, keyword: str = "") -> tuple:
+    """开商店到搜索页（能直落搜索 activity 就直落），返 (ok, why, cmd)。"""
+    act = STORE_SEARCH_ACT.get(pkg)
+    if act:
+        comp = f"{pkg}/{act}"
+        sh(f"am start -W -n {comp}")
+        time.sleep(1.2)
+        ok = fg_package() == pkg
+        if ok and keyword:
+            input_text(keyword)
+            sh("input keyevent 66")
+            time.sleep(2.0)
+        return ok, ("已到搜索页" if ok else f"前台仍系 {fg_package() or '未知'}"), f"am start -W -n {comp}"
+    ok, why, cmd = open_app(pkg)
+    return ok, why, cmd
+
+
+# 应用商店：国产优先、Google Play 排最后；只列真实会装喺大陆机 / redroid 嘅
+STORES = [
+    ("com.tencent.android.qqdownloader", "应用宝"),
+    ("com.xiaomi.market", "小米应用商店"),
+    ("com.huawei.appmarket", "华为应用市场"),
+    ("com.heytap.market", "OPPO 软件商店"),
+    ("com.bbk.appstore", "vivo 应用商店"),
+    ("com.sec.android.app.samsungapps", "三星应用商店"),
+    ("com.qihoo.appstore", "360手机助手"),
+    ("com.baidu.appsearch", "百度手机助手"),
+    ("com.wandoujia.phoenix2", "豌豆荚"),
+    ("com.coolapk.market", "酷安"),
+    ("com.apkpure.aegon", "APKPure"),
+    ("com.aurora.store", "Aurora Store"),
+    ("org.fdroid.fdroid", "F-Droid"),
+    ("com.android.vending", "Google Play"),
+]
+_PRONOUN = ("这个", "呢个", "它", "佢", "佢哋", "呢只", "这只", "当前", "现在", "前面")
+
+
+def stores() -> list:
+    """机上真装咗嘅商店，按偏好排序（应用宝最前，Google Play 最后）。"""
+    inst = set(installed())
+    return [(p, n) for p, n in STORES if p in inst]
+
+
+def store_line() -> str:
+    """一句环境事实：唔使 L2 自己揾商店，更唔好去查 Play。"""
+    st = stores()
+    if not st:
+        return "机上冇装任何应用商店；唔好盲试，直接同用户讲要装商店先。"
+    names = "、".join(f"{n}({p})" for p, n in st[:3])
+    play = "" if any(p == "com.android.vending" for p, _ in st) else "；Google Play 冇装，唔好揾 Play"
+    return f"已装商店：{names}{play}。直接用最前嗰个商店搜，唔好翻应用抽屉。"
 
 
 def _clean_app_name(name: str) -> str:
@@ -286,13 +379,27 @@ def l0_try(text: str) -> dict | None:
     # 1c) 下载 / 安装 X：已装就直答唔使再装（唔好白开应用宝）
     m = re.search(r"(?:下载|安装|装)\s*(?:一个|个)?\s*([^\s，。？！]{1,14})", t)
     if m:
-        name = re.sub(r"(app|应用|应用程式|程式)$", "", m.group(1).strip(), flags=re.I)
-        pkg = resolve_package(name)
+        name, pkg = install_target(text)          # 从原文抽名（clean() 会食走「贴吧」个「吧」）
+        name = name or _clean_app_name(m.group(1))
         if pkg and pkg in installed():
             tr = trace("L0", f"{name} 已装", [f"pm list packages {pkg}"], t0, True,
                        f"已经装咗：{pkg}，唔使再下载")
             tr["final"] = True
             return tr
+        # 未装：唔好交 L2 自己翻抽屉揾商店——adb 已经知边个商店装咗，直接开佢
+        st = stores()
+        if st:
+            sp, sn = st[0]
+            ok, why, cmd = open_store_search(sp, name)      # 直落搜索页并落关键字
+            tr = trace("L0", f"开{sn}揾「{name}」", [cmd], t0, ok, why or sp)
+            if ok:
+                tr["continue"] = f"喺{sn}搜「{name}」并下载安装"
+                tr["l2_next"] = True          # 落一步系 UI 流程，唔系控件名，唔好浪费 L1a/L1b
+            return tr
+        tr = trace("L0", f"装 {name}", [], t0, False,
+                   f"机上冇任何应用商店，装唔到「{name}」；要先装商店（应用宝等）")
+        tr["final"] = True
+        return tr
 
     # 2) 桌面 / 返回
     if re.search(r"(回|返|去).{0,3}(桌面|主页|首页|home)", t, re.I):
@@ -535,8 +642,8 @@ def l1a_try(text: str) -> dict | None:
     if not m:
         return None
     target = m.group(1).strip()
-    if not target or re.fullmatch(r"\d+", target):
-        return None
+    if not target or re.fullmatch(r"\d+", target) or target in _PRONOUN:
+        return None                     # 指代词（佢/呢个…）唔系控件名，慳返一次无障碍扫描
     t0 = time.time()
     snap = snapshot()
     if not snap["nodes"]:
@@ -826,6 +933,9 @@ def route(text: str, emit=None) -> dict | None:
             text = tr["continue"]
             if not text:
                 return tr
+            if tr.get("l2_next"):
+                return {"to_l2": True, "layer": tr["layer"], "label": tr["label"],
+                        "ms": tr["ms"], "note": note}      # 直接落 L2，唔再扫无障碍/WebView
             continue
         if tr and note:
             tr["note"] = note

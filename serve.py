@@ -388,6 +388,46 @@ def query_head(ans) -> str:
     return f"冇：包表揾唔到「{name}」"
 
 
+INSTALL_RE = re.compile(r"(?:下载|安装|装)\s*(?:一个|个)?\s*[^\s，。？！]{1,14}")
+SETTLE_JUNK = ("com.android.settings", "com.android.documentsui",
+               "com.android.permissioncontroller", "com.google.android.permissioncontroller")
+
+
+def settle_before_l2(text: str) -> str:
+    """L2 开工前归位：上一单残留在设置/文档/权限页会白烧几步去退出。
+
+    只收拾「垃圾状态」，唔动应用宝等真目标 App（L0 可能啱啱开定畀佢）。"""
+    if not INSTALL_RE.search(text):
+        return ""
+    fg = layers.fg_package()
+    if fg and any(fg.startswith(j) for j in SETTLE_JUNK):
+        layers.sh("input keyevent 3")
+        time.sleep(0.8)
+        return f"开工前归位（{fg} → 桌面）"
+    return ""
+
+
+def prep_l2_prompt(text: str) -> str:
+    """落 L2 之前塞环境事实：装应用唔使佢自己翻抽屉揾商店，更唔好查 Play。"""
+    if not INSTALL_RE.search(text):
+        return text
+    return text + "\n\n【环境·adb 已确认】" + layers.store_line() + " 装完弹通知/隐私权限就直接允许。"
+
+
+def post_task_touch(text: str) -> str:
+    """收尾：装完补通知授权、用前台包名核「打开」有冇真系开咗。"""
+    bits = []
+    name, pkg = layers.install_target(text)
+    if pkg and pkg in layers.installed(force=True):
+        layers.sh(f"pm grant {pkg} android.permission.POST_NOTIFICATIONS")
+        bits.append(f"已预授权通知 {pkg}")
+    if re.search(r"(打开|启动|进入)", text):
+        fg = layers.fg_package()
+        if fg:
+            bits.append(f"前台 {fg}")
+    return "；".join(bits)
+
+
 def chat_context() -> str:
     """对话模式嘅事实底：设备 + 当前状态 + 上一单结果（唔加截图，慳钱）。"""
     st = dict(STATE)
@@ -468,7 +508,44 @@ def qphone_status() -> dict:
         return {"ok": False, "error": str(e)}
 
 
-def _exec_l2(q, prompt: str, steps: int, started: float):
+def _install_watcher(orig_text: str, proc, stop: dict, got: dict) -> None:
+    """装完即收尾：adb 每 2 秒查包表，装咗就开 App 并叫停模型。
+
+    模型唔知安装完成快手，会一路对住「Installing…」空等 5–6 步；
+    呢度用 adb 事实斩断，唔靠画面。"""
+    name, pkg = layers.install_target(orig_text)
+    if not pkg:
+        return
+    want_open = bool(re.search(r"(打开|启动|进入)", orig_text))
+    for _ in range(150):                                   # 最多 ~5 分钟
+        if stop.get("stop"):
+            return
+        try:
+            here = pkg in layers.installed(force=True)
+        except Exception:                                  # noqa: BLE001
+            here = False
+        if here:
+            time.sleep(1.2)
+            opened = False
+            if want_open:
+                try:
+                    layers.open_app(pkg)
+                    time.sleep(1.6)
+                    opened = layers.fg_package() == pkg
+                except Exception:                          # noqa: BLE001
+                    opened = False
+            layers.sh(f"pm grant {pkg} android.permission.POST_NOTIFICATIONS")
+            got.update(hit=True, pkg=pkg, opened=opened,
+                       msg=f"装完即收尾（adb 确认）：{pkg} 已安装" + ("并已打开" if opened else "，未确认打开"))
+            try:
+                proc.terminate()
+            except Exception:                              # noqa: BLE001
+                pass
+            return
+        time.sleep(2)
+
+
+def _exec_l2(q, prompt: str, steps: int, started: float, orig_text: str = ""):
     """跑一次 Mobilerun，返 (success, message, traj_dir, 用咗几步)。"""
     provider, base, key = llm_route()
     cmd = [
@@ -487,6 +564,9 @@ def _exec_l2(q, prompt: str, steps: int, started: float):
     env["OPENAI_API_KEY"] = key
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, bufsize=1, env=env)
+    stop, got = {"stop": False}, {}
+    if orig_text and INSTALL_RE.search(orig_text):
+        threading.Thread(target=_install_watcher, args=(orig_text, proc, stop, got), daemon=True).start()
     success, message, collecting, traj_dir, maxstep = False, "", False, "", 0
     assert proc.stdout is not None
     for line in proc.stdout:
@@ -533,6 +613,10 @@ def _exec_l2(q, prompt: str, steps: int, started: float):
         if tp.is_dir():
             TRAJ_DIRS[tp.name] = tp
             tid = tp.name
+    stop["stop"] = True
+    if got.get("hit") and not success:
+        success = True
+        message = got.get("msg") or message        # 收尾由 adb 讲，唔靠模型自述
     if not tid:
         tid = latest_trajectory(started)
     if tid:
@@ -582,8 +666,11 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
     lstats, ltot = layer_bump("L2")
     CURRENT_TASK["layer"] = "L2"
     RUN.update(text=text, used=0, of=int(STEPS), round=0, active=True, note="")
+    settle_note = settle_before_l2(text)
+    if settle_note:
+        q.put(("progress", {"line": settle_note}))
     try:
-        success, message, tid, used = _exec_l2(q, text, int(STEPS), started)
+        success, message, tid, used = _exec_l2(q, prep_l2_prompt(text), int(STEPS), started, text)
         RUN["used"] = used
         LAST_RESULT.update(ok=bool(success), msg=message or "", ts=time.time())
         hist_task_update(CURRENT_TASK["id"], phase="done" if success else "human",
@@ -592,7 +679,9 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
             RUN["active"] = False
             _pub(q, "done", action="")
             ans = query_answer(text)
-            msg = (query_head(ans) + "；" + (message or "做完")) if ans else (message or "做完")
+            touch = post_task_touch(text)
+            base = "；".join(x for x in (ans and query_head(ans), message or "做完", touch) if x)
+            msg = base
             q.put(("result", {"success": True, "message": msg, "answer": bool(ans),
                               "layer_stats": lstats, "layer_total": ltot}))
         else:

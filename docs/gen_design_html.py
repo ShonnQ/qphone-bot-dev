@@ -96,6 +96,13 @@ def main() -> int:
     body = re.sub(r"(?<=>)20\d\d-\d\d-\d\d(?=<)", r'<span class="nowrap">\g<0></span>', body)
     body = _hero(body)
 
+    # 每个一级标题（<h2>）一节 → 套公司全景式区域框
+    chunks = re.split(r"(?=<h2[ >])", body)
+    body = "".join(
+        f'<section class="card">{c}</section>' if c.lstrip().startswith("<h2") else c
+        for c in chunks
+    )
+
     html = f"""<!doctype html>
 <html lang="zh-Hant">
 <head>
