@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 v0.35</title>
+<title>QPhone 详细设计说明书 v0.36</title>
 <style>
 :root{
   --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
@@ -51,10 +51,10 @@ strong{font-weight:700}
 </style>
 </head>
 <body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.35</span><span>渲染自 详细设计.md</span></div>
+<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 v0.36</span><span>渲染自 详细设计.md</span></div>
 <h1>QPhone 详细设计说明书</h1>
 <blockquote>
-<p>版本：v0.35</p>
+<p>版本：v0.36</p>
 <p>日期：2026-10-23</p>
 <p>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></p>
 </blockquote>
@@ -282,6 +282,12 @@ strong{font-weight:700}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.36</td>
+<td><strong>L0 解析纪律</strong>（PR-20261027-2）：老板实测「卸载掉360浏览器吧」跌 L2（6 步）。修 <code>clean()</code> 唔清句尾语气词（补 吧/啊/嘛/咯/囉）、卸载正则唔食补语（加 <code>(?:掉\|咗\|了\|甩)?</code>，关 app / 清数据同步）、别名表缺 360浏览器 / 百度网盘 / 腾讯视频 等 9 个；<strong>卸载系确定性动作</strong>，查唔到包名即刻 L0 报「包表冇 X + 机上第三方清单」并 <code>final</code>，指代词才交 L1/L2；卸完清 <code>installed()</code> 缓存。实测 165 ms 真卸 / 27 ms 报未装。</td>
+<td>C</td>
+<td><span class="nowrap">2026-10-27</span></td>
+</tr>
 <tr>
 <td>v0.35</td>
 <td><strong>步骤日志过程行加服务端副本</strong>（PR-20261027-1）：过程行原只活喺本条 SSE，页面一刷新就全空而卡片照样「完成」。新增 <code>_log_row()</code>（同壳同一套规则翻译事件）+ <code>_log_push()</code> 写落 <code>HISTORY.&lt;单&gt;.log</code>（上限 400 行、连续相同去重），<code>/history</code> 带出；壳 <code>slReplayLast()</code> 开页重放<strong>最后一单</strong>，首行标 <code>重放</code>；旧数据出「未存过程行」提示，唔扮有。</td>
@@ -1270,6 +1276,40 @@ serve.py 切 NAL → [4B len][1B kind][4B ts][payload] → 广播畀所有客户
 </tr>
 </tbody>
 </table>
+<p><strong>L0 解析纪律：确定性动作唔可以因为「讲法」而跌层（v0.36，PR-20261027-2）</strong></p>
+<p>老板实测「卸载掉 360浏览器吧」跌咗 L2（6 步、几分钟），而实质只系一句 <code>pm uninstall</code>。三个原因同时成立：</p>
+<table>
+<thead>
+<tr>
+<th>原因</th>
+<th>现象</th>
+<th>修法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>句尾语气词未清</td>
+<td><code>clean()</code> 只清「啦/呀/下」，唔清「吧/啊/嘛」→ 抓出 app 名「360浏览器吧」</td>
+<td><code>NOISE</code> 补 <code>吧/啊/嘛/咯/囉</code></td>
+</tr>
+<tr>
+<td>补语未食</td>
+<td>正则 <code>^(?:卸载\|删掉\|移除)\s*(.+)$</code> 对「卸载<strong>掉</strong>X」抓到「掉X」</td>
+<td>正则加 <code>(?:掉\|咗\|了\|甩)?</code>（关 app / 清数据同步改）</td>
+</tr>
+<tr>
+<td>别名表缺词</td>
+<td>360浏览器 / 百度网盘 / 腾讯视频冇别名，包名 token 又对唔上</td>
+<td><code>APP_EXTRA</code> 补 9 个常用别名</td>
+</tr>
+</tbody>
+</table>
+<p>另外两条判定规矩：</p>
+<ul>
+<li><strong>卸载系确定性动作</strong>：查唔到包名就即刻喺 L0 报「包表冇 X；机上第三方有 N 个：…」并 <code>final=true</code>，<strong>唔准</strong>落 L2 用视觉点几十秒；除非句子里系指代词（这个 / 呢个 / 佢 / 当前…），才交 L1/L2 睇屏幕做。</li>
+<li><strong>卸完要清 <code>installed()</code> 缓存</strong>（60 s），否则同一句再问会答「已装」。</li>
+</ul>
+<p>实测：<code>卸载掉SplashScreen吧</code> → L0 <code>pm uninstall com.example.splashscreen</code> <strong>165 ms</strong>、1 步、<code>Success</code>；<code>卸载掉360浏览器吧</code> → L0 <strong>27 ms</strong> 报「未安装，冇嘢可卸载」（唔再开 L2）。</p>
 <p><strong>实测（redroid 13 / 720×1280）</strong></p>
 <table>
 <thead>

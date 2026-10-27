@@ -100,6 +100,10 @@ APP_EXTRA = {
     "高德地图": "com.autonavi.minimap", "百度地图": "com.baidu.BaiduMap",
     "钉钉": "com.alibaba.android.rimet", "飞书": "com.ss.android.lark",
     "chrome": "com.android.chrome", "迅雷": "com.xunlei.downloadprovider",
+    # 2026-10-27 补：老板实际讲过、之前查唔到嘅几个（「卸载掉360浏览器」走咗 L2 就系因为呢个缺）
+    "360浏览器": "com.qihoo.browser", "360": "com.qihoo.browser", "奇虎360": "com.qihoo.browser",
+    "百度网盘": "com.baidu.netdisk", "百度云盘": "com.baidu.netdisk", "百度云": "com.baidu.netdisk",
+    "腾讯视频": "com.tencent.qqlive", "爱奇艺": "com.qiyi.video", "优酷": "com.youku.phone",
 }
 APP_ALIASES.update(APP_EXTRA)
 
@@ -121,7 +125,8 @@ def installed(force: bool = False) -> set:
     return pk
 
 
-NOISE = ("帮我", "同我", "麻烦你", "请", "唔该", "我想", "我要", "即刻", "一下", "下", "啦", "吖", "呀", "吓")
+NOISE = ("帮我", "同我", "麻烦你", "请", "唔该", "我想", "我要", "即刻", "一下", "下", "啦", "吖", "呀", "吓",
+         "吧", "啊", "嘛", "咯", "囉")      # 句尾语气词：唔清走会令「卸载360浏览器吧」解析唔出 app 名
 
 
 def clean(text: str) -> str:
@@ -265,26 +270,41 @@ def l0_try(text: str) -> dict | None:
         ok = keyevent(4)
         return trace("L0", "返回", ["input keyevent 4"], t0, ok)
 
-    # 3) 关 app / 清数据 / 卸载
-    m = re.match(r"^(?:关掉|关闭|杀掉|force.?stop|结束)\s*(.+)$", t) or re.match(r"^关\s*(.+)$", t)
+    # 3) 关 app / 清数据 / 卸载（「掉 / 咗」同句尾语气词都要食得落：「卸载掉360浏览器吧」）
+    m = re.match(r"^(?:关掉|关闭|杀掉|force.?stop|结束)\s*(?:掉|咗|了)?\s*(.+)$", t) or re.match(r"^关\s*(.+)$", t)
     if m:
         pkg = resolve_package(m.group(1))
         if pkg:
             sh(f"am force-stop {pkg}")
             ok = fg_package() != pkg
             return trace("L0", f"关 {m.group(1)}", [f"am force-stop {pkg}"], t0, ok)
-    m = re.match(r"^(?:清除?|清空)(.+?)(?:的)?数据$", t)
+    m = re.match(r"^(?:清除?|清空)\s*(.+?)\s*(?:的)?数据$", t)
     if m:
         pkg = resolve_package(m.group(1))
         if pkg:
             out = sh(f"pm clear {pkg}")
             return trace("L0", f"清 {m.group(1)} 数据", [f"pm clear {pkg}"], t0, "Success" in out, out.strip()[:60])
-    m = re.match(r"^(?:卸载|删掉|移除)\s*(.+)$", t)
+    m = re.match(r"^(?:卸载|卸掉|删掉|删除|移除|uninstall)\s*(?:掉|咗|了|甩)?\s*(.+)$", t, re.I)
     if m:
-        pkg = resolve_package(m.group(1))
-        if pkg:
-            out = sh(f"pm uninstall {pkg}")
-            return trace("L0", f"卸载 {m.group(1)}", [f"pm uninstall {pkg}"], t0, "Success" in out, out.strip()[:60])
+        name = re.sub(r"(app|应用|应用程式|程式)$", "", m.group(1).strip(), flags=re.I).strip()
+        if name in ("这个", "呢个", "它", "佢", "当前", "现在", "前面", "呢只", "这只"):
+            return None                 # 指代唔明确：交 L1/L2 睇屏幕做
+        pkg = resolve_package(name)
+        if not pkg:
+            tr = trace("L0", f"卸载 {name}", ["pm list packages -3"], t0, False,
+                       f"包表冇「{name}」；机上第三方 app 有 {len(third_party())} 个：" + "、".join(third_party()[:6]))
+            tr["final"] = True          # 卸载系确定性动作：查唔到就即刻报，唔好落 L2 点几十秒
+            return tr
+        if pkg not in installed(force=True):
+            tr = trace("L0", f"卸载 {name}", [f"pm list packages {pkg}"], t0, True,
+                       f"{pkg} 未安装，冇嘢可卸载")
+            tr["final"] = True          # 确定结论，唔好白跑 L1/L2
+            return tr
+        out = sh(f"pm uninstall {pkg}")
+        ok = "Success" in out
+        if ok:
+            _INSTALLED["pkgs"].discard(pkg)          # 清缓存，否则 60 秒内仍报「已装」
+        return trace("L0", f"卸载 {name}", [f"pm uninstall {pkg}"], t0, ok, out.strip()[:60] or pkg)
 
     # 4) 音量 / 亮度
     m = re.match(r"^音量\s*(调大|大|加|调细|细|小|减|静音|\d+)$", t)
