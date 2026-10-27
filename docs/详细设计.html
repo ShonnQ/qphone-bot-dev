@@ -1389,6 +1389,10 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <p>去噪：<code>✨🚀🤖👁📁🔧⚙🎯📦</code> banner、<code>&lt;...&gt;</code> / <code>FastAgent response</code> / <code>Malformed</code> / <code>Traceback</code> / <code>Attempt N</code> 唔入；<code>L0 · …</code> 摘要由 layer 行表达，唔重复；连续相同内容去重；<code>思考</code> 每步只写一次。</p>
 <p><strong>服务端副本（v0.35）</strong>：过程行另存 <code>HISTORY.&lt;单&gt;.log</code>（上限 400 行、连续相同去重），<code>/history</code> 带出；壳开页由 <code>slReplayLast()</code> 重放最后一单，首行标 <code>重放 … N 行</code>；旧数据冇 <code>log</code> 就出一行提示，唔扮有；本页已有实时行时唔覆盖。</p>
 <p>右栏结构：<code>云机实况</code> → <code>返回/主页/多任务</code> → <code>步骤日志</code>（占满剩余高度、内部滚动；标题右侧留时间 / 分辨率 / fps）。</p>
+<p><strong>坐标叠层（v0.39）</strong>：<code>云机实况</code> 标题栏有「坐标」开关，开了就在画面上叠 100px 网格（按实际 720×1280 标数值）+ 每次落点十字（青色，留 15 s、带 <code>x,y · 层</code> 标注）+ 滑动线（蓝色，起点到终点）；右下角读数框写最近落点与设备分辨率。落点来源三个：① 服务端 <code>layer</code> 事件的 <code>xy</code> / <code>xy2</code>（L0 点/滑、L1a 点控件都带）；② <code>cmds</code> 里的 <code>input tap x y</code> / <code>input swipe …</code>；③ L2 的 <code>点 (x, y)</code>；人手动点画面也会标，src 写「手动」。</p>
+<blockquote>
+<p>唔用 Android 开发者选项：实测 <code>settings put system pointer_location 1</code> 只显示顶栏坐标图，<code>adb shell input tap</code> 注入的手势<strong>唔会</strong>出现在叠加层（注入事件唔经触摸屏那一层），<code>show_touches</code> 同理——所以自己画。</p>
+</blockquote>
 <h4>3.4.17 语义路由层（S 层）</h4>
 <p><strong>一句话</strong>：规则先跑（命中就 0 模型、0 延迟）；<strong>三层规则全 miss 才问一次模型</strong>，只拿「意图 + 槽位」，再按路由表派去 L0 / L1a / L1b。L1a、L1b 一样食语义，唔止 L0。</p>
 <pre><code>L0 规则 → L1a 规则 → L1b 规则 ──全 miss──→ S 层（一次 LLM，只出 JSON）

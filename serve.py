@@ -303,6 +303,19 @@ TASK_WORDS = ("打开", "开一", "开启", "开下", "帮我开", "关掉", "�
               "卸", "卸载", "卸掉", "卸咗", "移除", "删走", "删咗", "打走",
               "存入", "存落", "存档", "加入", "新增", "新建", "建个", "开个", "备忘", "笔记",
               "填", "整", "搞", "帮我", "帮手", "同我", "麻烦你")
+# 确定性动作句（L0 自己就认得出，唔应该先掉去「唔清楚」再劳烦语义层/模型）
+TASK_PATTERNS = (
+    r"^(?:点|点击|tap)\s*[（(]?\s*\d{1,4}\s*[,，\s]\s*\d{1,4}",                  # 点 360,900
+    r"^(?:滑|滑动|swipe)\s*[（(]?\s*\d{1,4}\s*[,，\s]\s*\d{1,4}",                # 滑 200,700,200,300
+    r"^(?:输入|打|type)\s+[\x20-\x7e]{1,120}$",                                     # 输入 ASCII
+    r"^音量\s*(?:调大|大|加|调细|细|小|减|静音|\d+)$",
+    r"^(?:调|设|改|设成)?(?:屏幕)?亮度\s*(?:调到|调成|设成|改成|到)?\s*\d{1,3}$",
+    r"^(?:打开|开启|开|关闭|关掉|关)\s*(?:wifi|wi-fi|无线|蓝牙|飞行模式)$",
+    r"^(?:列包|列一下包)$", r"^(?:属性|getprop)\s+\S+$",
+    r"^(?:查前台|查一下前台|前台系咩)$", r"(?:截图|截屏|screenshot)",
+    r"^(?:打开|开|去)\s*https?://\S+$",
+)
+
 CHAT_WORDS = ("你好", "哈佬", "hello", "hi", "咩", "什么", "点解", "为什么", "分别", "有冇", "系咪",
               "边个", "几多", "多少", "你觉得", "解释", "讲讲", "介绍", "可以吗", "?", "？", "点样")
 
@@ -320,6 +333,9 @@ def classify(text: str) -> dict:
     chat = sum(1 for w in CHAT_WORDS if (w in low if w.isascii() else w in s))
     if not s:
         return {"mode": "chat", "why": "空", "task": 0, "chat": 0}
+    for pat in TASK_PATTERNS:                     # 确定性句唔使问模型
+        if re.match(pat, s, re.I):
+            return {"mode": "task", "why": f"确定性动作 {pat[:14]}", "task": 1, "chat": chat}
     if task and not chat:
         return {"mode": "task", "why": f"动作词 {task}", "task": task, "chat": chat}
     if chat and not task:

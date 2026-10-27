@@ -45,9 +45,12 @@ def now_ms() -> int:
     return int(time.time() * 1000)
 
 
-def trace(layer: str, label: str, cmds: list[str], t0: float, ok: bool, why: str = "") -> dict:
-    return {"layer": layer, "label": label, "cmds": cmds,
-            "ms": now_ms() - int(t0 * 1000), "ok": ok, "why": why}
+def trace(layer: str, label: str, cmds: list[str], t0: float, ok: bool, why: str = "",
+          **extra) -> dict:
+    d = {"layer": layer, "label": label, "cmds": cmds,
+         "ms": now_ms() - int(t0 * 1000), "ok": ok, "why": why}
+    d.update(extra)                      # xy / xy2：壳画落点十字要用
+    return d
 
 
 # ─────────────────────────────── 设备状态读取
@@ -388,11 +391,15 @@ def l0_try(text: str) -> dict | None:
     m = re.match(r"^(?:点|点击|tap)\s*[（(]?\s*(\d{1,4})\s*[,，\s]\s*(\d{1,4})", t)
     if m:
         ok = tap(int(m.group(1)), int(m.group(2)))
-        return trace("L0", f"点 ({m.group(1)}, {m.group(2)})", ["input tap"], t0, ok)
+        return trace("L0", f"点 ({m.group(1)}, {m.group(2)})",
+                     [f"input tap {m.group(1)} {m.group(2)}"], t0, ok,
+                     xy=(int(m.group(1)), int(m.group(2))))
     m = re.match(r"^(?:滑|滑动|swipe)\s*[（(]?\s*(\d{1,4})\s*[,，\s]\s*(\d{1,4})\s*[)）,，\s]+\s*(\d{1,4})\s*[,，\s]\s*(\d{1,4})", t)
     if m:
         ok = swipe(*[int(x) for x in m.groups()])
-        return trace("L0", "滑动", ["input swipe"], t0, ok)
+        return trace("L0", f"滑动 ({m.group(1)},{m.group(2)})→({m.group(3)},{m.group(4)})",
+                     [f"input swipe {m.group(1)} {m.group(2)} {m.group(3)} {m.group(4)}"], t0, ok,
+                     xy=(int(m.group(1)), int(m.group(2))), xy2=(int(m.group(3)), int(m.group(4))))
     m = re.match(r"^(?:输入|打|type)\s+([\x20-\x7e]{1,120})$", t, re.I)
     if m:
         adb("shell", "input", "text", m.group(1).replace(" ", "%s"))
@@ -534,7 +541,9 @@ def l1a_try(text: str) -> dict | None:
     after = snapshot(force=True)
     ok = fg_package() != before_fg or after["hash"] != before_hash
     why = f"{node.get('label') or node.get('identifier') or node.get('type')} @({c[0]},{c[1]})"
-    return trace("L1a", f"点「{target}」", ["agent-device snapshot", "input tap"], t0, ok, why)
+    return trace("L1a", f"点「{target}」 @{c[0]},{c[1]}",
+                 ["agent-device snapshot", f"input tap {c[0]} {c[1]}"],
+                 t0, ok, why, xy=(int(c[0]), int(c[1])))
 
 
 def l1a_snapshot_lines(limit: int = 8) -> list[str]:
@@ -815,9 +824,13 @@ def _route_once(text: str, chain, emit):
     def fire(tr: dict) -> None:
         if emit:
             try:
-                emit("layer", {"layer": tr["layer"], "label": tr["label"],
-                               "cmds": tr["cmds"], "ms": tr["ms"],
-                               "ok": tr["ok"], "why": tr.get("why", "")})
+                payload = {"layer": tr["layer"], "label": tr["label"],
+                           "cmds": tr["cmds"], "ms": tr["ms"],
+                           "ok": tr["ok"], "why": tr.get("why", "")}
+                for k in ("xy", "xy2", "final"):
+                    if tr.get(k) is not None:
+                        payload[k] = tr[k]          # 壳画落点十字要靠 xy
+                emit("layer", payload)
             except Exception:                              # noqa: BLE001
                 pass
 

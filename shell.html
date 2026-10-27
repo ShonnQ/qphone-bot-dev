@@ -149,6 +149,18 @@
            background:color-mix(in srgb, var(--ok) 10%, var(--panel2));background-image:none}
   .n.xs.ok b{color:var(--ok)}
   /* 状态条 Step 层下方：执行层调用占比（按单计，每单只用一层） */
+  /* ── 坐标叠层：网格 + 落点十字 ── */
+  #xyCanvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;
+    opacity:0;transition:opacity .18s ease}
+  .phone.xy #xyCanvas{opacity:1}
+  .xyread{position:absolute;right:8px;bottom:8px;z-index:5;pointer-events:none;white-space:pre;
+    font:10px/1.55 ui-monospace,Menlo,monospace;color:var(--soft);
+    background:rgba(6,10,14,.74);border:1px solid var(--line2);border-radius:6px;padding:4px 7px;
+    opacity:0;transition:opacity .2s ease}
+  .phone.xy .xyread{opacity:1}
+  #xyT{font:10px/1 inherit;letter-spacing:.5px;color:var(--soft);background:none;
+    border:1px solid var(--line2);border-radius:999px;padding:3px 8px;margin-left:auto;cursor:pointer}
+  #xyT.on{color:#05070a;background:var(--acc1);border-color:var(--acc1)}
   .lstat{margin-top:7px;font-size:10.5px;color:var(--soft)}
   .lstat:empty{display:none}
   .lstat2{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
@@ -785,10 +797,13 @@ try{ if(localStorage.getItem("qph-theme")==="dark") document.documentElement.set
   </div><!-- /board -->
 
 <aside class="livepanel">
-  <div class="lp-head"><i class="ldot" id="ldot"></i><b>云机实况</b><span id="liveRes">—</span></div>
+  <div class="lp-head"><i class="ldot" id="ldot"></i><b>云机实况</b>
+    <button id="xyT" type="button" title="显示 100px 坐标网格同每次落点">坐标</button><span id="liveRes">—</span></div>
   <div class="phone" id="liveBox" title="点一下＝点云机，拖动＝滑动">
     <canvas id="liveCanvas" width="720" height="1280"></canvas>
     <img id="liveImg" alt="云机画面">
+    <canvas id="xyCanvas"></canvas>
+    <div class="xyread" id="xyRead"></div>
     <div class="off" id="liveOff"><b>云机离线</b><small id="liveOffSub">画面系旧帧</small></div>
   </div>
   <div class="keypad" id="keypad">
@@ -1211,6 +1226,7 @@ async function pump(resp, text){
         }
         if(!data) continue;
         let o = {}; try{ o = JSON.parse(data); }catch(_){}
+        try{ xyFromEvent(ev, o); }catch(_){}
         if(ev === "intent"){
           if(o.mode === "task"){ typing(false); paint({phase:"turn"}); }
         }else if(ev === "layer"){
@@ -1650,6 +1666,121 @@ function ripple(ev){
   d.style.top  = (ev.clientY - r.top)  + "px";
   box.appendChild(d); setTimeout(() => d.remove(), 380);
 }
+
+// ── 坐标叠层：100px 网格 + 每次落点十字（手动 / L0 / L1a / L1b / L2 都画）──
+const XY = {on:false, taps:[], swipes:[]};
+function xyGeom(){
+  const box = $("liveBox"), cv = $("xyCanvas");
+  const el = document.querySelector(".livepanel").classList.contains("streaming") ? $("liveCanvas") : $("liveImg");
+  if(!box || !cv || !el) return null;
+  const br = box.getBoundingClientRect(), r = el.getBoundingClientRect();
+  if(!r.width || !br.width) return null;
+  const {w:dw, h:dh} = devSize();
+  const k = Math.min(r.width/dw, r.height/dh);
+  const dpr = window.devicePixelRatio || 1;
+  const wantW = Math.round(br.width*dpr), wantH = Math.round(br.height*dpr);
+  if(cv.width !== wantW || cv.height !== wantH){ cv.width = wantW; cv.height = wantH; }
+  return {k, ox: r.left - br.left + (r.width - dw*k)/2, oy: r.top - br.top + (r.height - dh*k)/2, dw, dh, dpr};
+}
+function xyDraw(){
+  const cv = $("xyCanvas"); if(!cv) return;
+  const g = xyGeom(); if(!g) return;
+  const c = cv.getContext("2d");
+  c.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
+  c.clearRect(0, 0, cv.width, cv.height);
+  if(!XY.on) return;
+  const now = Date.now();
+  XY.taps   = XY.taps.filter(t => now - t.t < 15000);
+  XY.swipes = XY.swipes.filter(t => now - t.t < 15000);
+  // 网格
+  c.lineWidth = 1; c.font = "9px ui-monospace,Menlo,monospace";
+  c.strokeStyle = "rgba(46,230,201,.16)"; c.fillStyle = "rgba(134,149,163,.9)";
+  for(let x = 0; x <= g.dw; x += 100){
+    const px = g.ox + x*g.k;
+    c.beginPath(); c.moveTo(px, g.oy); c.lineTo(px, g.oy + g.dh*g.k); c.stroke();
+    c.fillText(String(x), px + 2, g.oy + 10);
+  }
+  for(let y = 0; y <= g.dh; y += 100){
+    const py = g.oy + y*g.k;
+    c.beginPath(); c.moveTo(g.ox, py); c.lineTo(g.ox + g.dw*g.k, py); c.stroke();
+    c.fillText(String(y), g.ox + 3, py - 3);
+  }
+  // 滑动线
+  XY.swipes.forEach(sv => {
+    const a = Math.max(0, 1 - (now - sv.t)/15000);
+    c.strokeStyle = "rgba(96,168,255," + (0.85*a) + ")"; c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(g.ox + sv.x1*g.k, g.oy + sv.y1*g.k);
+    c.lineTo(g.ox + sv.x2*g.k, g.oy + sv.y2*g.k);
+    c.stroke();
+  });
+  // 落点
+  XY.taps.forEach(t => {
+    const a = Math.max(0.28, 1 - (now - t.t)/15000);
+    const px = g.ox + t.x*g.k, py = g.oy + t.y*g.k;
+    c.strokeStyle = "rgba(46,230,201," + (0.9*a) + ")"; c.lineWidth = 1.4;
+    c.beginPath(); c.arc(px, py, 13 - 6*(1 - a), 0, 6.2832); c.stroke();
+    c.beginPath();
+    c.moveTo(px - 17, py); c.lineTo(px + 17, py);
+    c.moveTo(px, py - 17); c.lineTo(px, py + 17);
+    c.stroke();
+    c.fillStyle = "rgba(232,238,244," + a + ")";
+    c.font = "10px ui-monospace,Menlo,monospace";
+    c.fillText(t.x + "," + t.y + "  " + t.src, px + 20, py - 9);
+  });
+  const rd = $("xyRead");
+  if(rd){
+    const last = XY.taps[XY.taps.length - 1];
+    rd.textContent = (last ? "最近 " + last.x + "," + last.y + " · " + last.src + "\n" : "")
+                   + "设备 " + g.dw + "×" + g.dh + " · 网格 100px";
+  }
+}
+function markTap(x, y, src){
+  const prev = XY.taps[XY.taps.length - 1];
+  if(prev && prev.x === x && prev.y === y && Date.now() - prev.t < 900) return;  // 同一落点唔好重覆画
+  XY.taps.push({x, y, src: src || "?", t: Date.now()});
+  if(XY.taps.length > 12) XY.taps.shift();
+  if(XY.on) xyDraw();
+}
+function markSwipe(x1, y1, x2, y2){
+  XY.swipes.push({x1, y1, x2, y2, t: Date.now()});
+  if(XY.swipes.length > 8) XY.swipes.shift();
+  if(XY.on) xyDraw();
+}
+// 由服务端事件抽坐标：L0/L1a 睇 cmds，L2 睇「点 (x, y)」
+function xyFromEvent(ev, o){
+  if(ev === "layer"){
+    if(o.xy && o.xy.length === 2){                       // 服务端直给坐标，最可靠
+      if(o.xy2 && o.xy2.length === 2) markSwipe(o.xy[0], o.xy[1], o.xy2[0], o.xy2[1]);
+      else markTap(o.xy[0], o.xy[1], o.layer || "L0");
+      return;
+    }
+    const lm = o.label && /点\s*\(?(\d{1,4})\s*,\s*(\d{1,4})\)?/.exec(o.label);
+    if(lm){ markTap(+lm[1], +lm[2], o.layer || "L0"); return; }
+    (o.cmds || []).forEach(cmd => {
+      let m = /input tap (\d+) (\d+)/.exec(cmd);
+      if(m){ markTap(+m[1], +m[2], o.layer || "L0"); return; }
+      m = /input swipe (\d+) (\d+) (\d+) (\d+)/.exec(cmd);
+      if(m){ markSwipe(+m[1], +m[2], +m[3], +m[4]); return; }
+    });
+  }else if(ev === "activity" && o.action){
+    const m = /点\s*\((\d+)\s*,\s*(\d+)\)/.exec(o.action);
+    if(m) markTap(+m[1], +m[2], LAYER_USED || "L2");
+  }
+}
+(function xyInit(){
+  const t = $("xyT"), box = $("liveBox");
+  if(!t || !box) return;
+  t.addEventListener("click", () => {
+    XY.on = !XY.on;
+    box.classList.toggle("xy", XY.on);
+    t.classList.toggle("on", XY.on);
+    xyDraw();
+  });
+  window.addEventListener("resize", () => { if(XY.on) xyDraw(); });
+  setInterval(() => { if(XY.on) xyDraw(); }, 500);      // 十字淡出 + 跟住画面尺寸变
+})();
+
 let pStart = null;
 const liveBoxEl = $("liveBox");
 if(liveBoxEl){
@@ -1668,9 +1799,11 @@ if(liveBoxEl){
     const wantFrame = !streamOn;                  // 流模式下画面由视频流更新，唔等截图
     try{
       if(dist < 9 && dt < 600){
+        markTap(s0.p.x, s0.p.y, "手动");
         await postJSON("/device/tap", {x:s0.p.x, y:s0.p.y, frame:wantFrame});
       }else{
         const e = toDev(ev); if(!e) return;
+        markSwipe(s0.p.x, s0.p.y, e.x, e.y);
         await postJSON("/device/swipe", {x1:s0.p.x, y1:s0.p.y, x2:e.x, y2:e.y,
                                          ms:Math.max(80, Math.min(900, dt)), frame:wantFrame});
       }
