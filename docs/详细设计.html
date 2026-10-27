@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone Bot 详细设计 v0.38</title>
+<title>QPhone Bot 详细设计 v0.39</title>
 <style>/* ============================================================================
    ShonnQ Corp · 默认视觉主题（科技简约 · 暗底星空）
    v1.0 · 2026-10-27 · 正本
@@ -236,7 +236,7 @@ a:hover{border-bottom-color:var(--acc)}
 <header class="hero">
   <div class="kicker">ShonnQ Corp · 详细设计</div>
   <h1>QPhone Bot 详细设计</h1>
-  <div class="docmeta"><span>版本：v0.38</span>
+  <div class="docmeta"><span>版本：v0.39</span>
   <span>日期：2026-10-23</span>
   <span>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></span></div>
 </header>
@@ -1634,6 +1634,11 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </thead>
 <tbody>
 <tr>
+<td>v0.39</td>
+<td>装应用快路径（18→5 步）+ 查询类结论排头 + 坐标叠层 + 附录 C L0 能力清单（§3.4.18、§3.4.14、附录 C）</td>
+<td>10-27</td>
+</tr>
+<tr>
 <td>v0.38</td>
 <td><strong>语义路由层 S 落地</strong>：三层规则全 miss 才问一次模型出「意图+槽位」，派去 L0/L1a/L1b（§3.4.17）</td>
 <td>10-27</td>
@@ -1792,6 +1797,198 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <td>v0.7</td>
 <td>按详细设计说明书重写，只留已核实内容</td>
 <td>10-19</td>
+</tr>
+</tbody>
+</table>
+</section><section class="card"><h2>附录 C 执行层 L0 能力清单</h2>
+<p>L0 系<strong>确定性命令层</strong>：靠正则 + 包名表下手，<strong>零模型调用</strong>。现时 20 项能力、64 条别名，分五大类。</p>
+<p><strong>进 L0 之前两道预处理</strong>：① 清走语气词/客套词（帮我 / 唔该 / 一下 / 吧 / 啊 / 嘛 / 咯…）；② 查 64 条别名表（应用宝 / 百度网盘 / 360浏览器 / 抖音 / 小红书 / 百度贴吧…），语义层学到嘅新别名写 <code>~/.qphone/alias-learned.json</code>。</p>
+<h3>C.1 应用管理（7 项）</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>可用讲法</th>
+<th>执行命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>打开</td>
+<td><code>打开/开/启动/进入/去/用/睇</code> + 名称；支持 <code>去&lt;app&gt;做X</code></td>
+<td><code>am start -W -n pkg/act</code></td>
+</tr>
+<tr>
+<td>关掉</td>
+<td><code>关掉/关闭/杀掉/结束 X</code></td>
+<td><code>am force-stop pkg</code></td>
+</tr>
+<tr>
+<td>卸载</td>
+<td><code>卸载/卸掉/删掉/移除 X</code>（可带 掉/咗/了/甩 + 句尾语气词）</td>
+<td><code>pm uninstall pkg</code>；查唔到包名就报「包表冇 + 机上第三方清单」收工</td>
+</tr>
+<tr>
+<td>清数据</td>
+<td><code>清X数据</code> / <code>清除X的数据</code></td>
+<td><code>pm clear pkg</code></td>
+</tr>
+<tr>
+<td>查有冇装</td>
+<td><code>有无装X</code> <code>有冇装X</code> <code>X装咗未</code> <code>X装了吗</code>（两种语序）</td>
+<td><code>pm list packages pkg</code>，<strong>结论排头</strong>：<code>有：pkg</code> / <code>冇：pkg</code></td>
+</tr>
+<tr>
+<td>装 APK</td>
+<td><code>安装 /sdcard/xxx.apk</code>（须带路径）</td>
+<td><code>pm install -r</code></td>
+</tr>
+<tr>
+<td>列已装</td>
+<td><code>列包</code> <code>有咩app</code> <code>睇下装咗咩应用</code></td>
+<td><code>pm list packages -3</code></td>
+</tr>
+</tbody>
+</table>
+<h3>C.2 设备设置（4 项）</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>可用讲法</th>
+<th>执行命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>音量</td>
+<td><code>音量 大/细/小/加/减/静音/5</code></td>
+<td><code>cmd media_session volume</code></td>
+</tr>
+<tr>
+<td>亮度</td>
+<td><code>亮度 120</code> <code>调亮度到 80</code></td>
+<td><code>settings put system screen_brightness</code></td>
+</tr>
+<tr>
+<td>Wi-Fi / 蓝牙</td>
+<td><code>打开wifi</code> <code>关掉蓝牙</code> <code>开无线</code></td>
+<td><code>svc wifi</code> / <code>cmd bluetooth_manager</code></td>
+</tr>
+<tr>
+<td>飞行模式</td>
+<td><code>开启飞行模式</code> <code>关飞行模式</code></td>
+<td><code>settings put global airplane_mode_on</code></td>
+</tr>
+</tbody>
+</table>
+<h3>C.3 输入与导航（5 项）</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>可用讲法</th>
+<th>执行命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>点坐标</td>
+<td><code>点 120,340</code> <code>点击(120,340)</code> <code>tap 500,800</code></td>
+<td><code>input tap x y</code></td>
+</tr>
+<tr>
+<td>滑动</td>
+<td><code>滑 100,200,100,800</code> <code>滑动(...)</code></td>
+<td><code>input swipe x1 y1 x2 y2</code></td>
+</tr>
+<tr>
+<td>文字输入</td>
+<td><code>输入 hello123</code></td>
+<td>有 ADBKeyBoard 用 broadcast（<strong>中文都落得</strong>）；冇就 <code>input text</code>（只 ASCII）</td>
+</tr>
+<tr>
+<td>按键</td>
+<td><code>回桌面</code> → KEYCODE 3；<code>返回/后退/back</code> → KEYCODE 4（现只接呢两个键）</td>
+<td><code>input keyevent</code></td>
+</tr>
+<tr>
+<td>回桌面</td>
+<td><code>回桌面</code> <code>返主页</code> <code>去首页</code> <code>home</code></td>
+<td><code>keyevent 3</code></td>
+</tr>
+</tbody>
+</table>
+<h3>C.4 信息采集（3 项）</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>可用讲法</th>
+<th>执行命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>查前台</td>
+<td><code>查前台</code> <code>现在系咩app</code> <code>当前系咩界面</code></td>
+<td><code>dumpsys activity activities</code> 取 <code>topResumedActivity</code></td>
+</tr>
+<tr>
+<td>读属性</td>
+<td><code>属性 ro.product.model</code> <code>getprop ro.xxx</code></td>
+<td><code>getprop key</code></td>
+</tr>
+<tr>
+<td>截图</td>
+<td>任何含「截图/截屏/screenshot」</td>
+<td><code>screencap -p /sdcard/qphone-&lt;ts&gt;.png</code></td>
+</tr>
+</tbody>
+</table>
+<h3>C.5 跳转（1 项）</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>可用讲法</th>
+<th>执行命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>开网址</td>
+<td><code>打开 https://…</code></td>
+<td><code>am start -a ACTION_VIEW -d url</code></td>
+</tr>
+</tbody>
+</table>
+<h3>C.6 装应用快路径（v0.39）</h3>
+<p><code>下载安装 X 并打开</code> 唔用 L2 摸索：L0 查商店表 → <code>am start</code> 直落商店搜索 activity → ADBKeyBoard 落中文 → Enter；<code>_install_watcher()</code> 每 2 s 查包表，装咗即开 App、<code>pm grant</code> 通知、叫停模型（详见 §3.4.18）。</p>
+<h3>C.7 L0 唔覆盖嘅范围</h3>
+<table>
+<thead>
+<tr>
+<th>情况</th>
+<th>交边层</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>要睇界面才知点嘅（设置里点「网络和互联网」、列表第 3 项、滚动加载）</td>
+<td>L1a（无障碍树）</td>
+</tr>
+<tr>
+<td>WebView 内点点</td>
+<td>L1b（CDP 直接 JS）</td>
+</tr>
+<tr>
+<td>中文自由文字输入到指定输入框（无 ADBKeyBoard 时）</td>
+<td>L2 / 待接 IME</td>
+</tr>
+<tr>
+<td>跨多步复合任务、登录/验证码/付款</td>
+<td>L2（人肉步骤由接管卡交人）</td>
 </tr>
 </tbody>
 </table></section>
