@@ -159,6 +159,7 @@
   /* 等你接手：提示气泡 + 继续按钮 */
   .b.hand{background:color-mix(in srgb, var(--warn) 12%, var(--panel));color:var(--fg);
           border:1px solid color-mix(in srgb, var(--warn) 45%, transparent)}
+  .b.hand.sub{opacity:.85;font-size:9.5px;border-style:dashed;margin-top:2px}
   .handbox{display:flex;gap:6px;align-items:center;margin-top:6px;max-width:78%}
   .handbox input{flex:1;min-width:120px;height:24px;border-radius:999px;padding:4px 10px;font-size:9px;
                  background:var(--panel);border:1px solid var(--line);color:var(--fg)}
@@ -1296,21 +1297,24 @@ async function resumeTurn(note){
   }
 }
 
-// 需要人接手（登录 / 验证码 / 手动点完）
+// 需要人接手（A 类：登录 / 验证码 / 付款 —— 用户只做一步，之后 agent 继续）
 function needHand(o){
   typing(false);
   const g = document.createElement("div"); g.className = "g bot";
   const w = document.createElement("div"); w.className = "who"; w.textContent = "云机 · 等你接手";
   const b = document.createElement("div"); b.className = "b bot hand";
-  b.textContent = "⚠️ " + String(o.reason || "要你处理一下").replace(/^Goal failed:\s*/, "")
-                + "（已用 " + (o.used ?? "?") + "/" + (o.of ?? "?")
-                + " 步，第 " + (o.round || 1) + "/" + (o.max || 1) + " 次机会）";
+  b.textContent = "⚠️ " + String(o.reason || "要你处理一步").replace(/^Goal failed:\s*/, "");
+  const d = document.createElement("div"); d.className = "b bot hand sub";
+  if (o.hand) d.textContent = "请你做：「" + o.hand + "」" + (o.after ? "。" + o.after : "") + "。其余我行返。";
+  else d.textContent = "请你处理呢一步（其余我行返）";
+  const meta = document.createElement("div"); meta.className = "who";
+  meta.textContent = "（已用 " + (o.used ?? "?") + "/" + (o.of ?? "?") + " 步，第 " + (o.round || 1) + "/" + (o.max || 1) + " 次机会）";
   const box = document.createElement("div"); box.className = "handbox";
-  const inp = document.createElement("input"); inp.placeholder = "你处理咗咩？可留空";
+  const inp = document.createElement("input"); inp.placeholder = "做完呢一步（如：已登录）后可留空";
   const btn = document.createElement("button"); btn.className = "pick"; btn.textContent = "我已处理好，继续";
   btn.addEventListener("click", () => { btn.disabled = true; box.remove(); resumeTurn(inp.value.trim()); });
   box.append(inp, btn);
-  g.append(w, b, box); chatEl.append(g); lastSide = "bot"; scrollDown(true);
+  g.append(w, b, d, meta, box); chatEl.append(g); lastSide = "bot"; scrollDown(true);
 }
 
 async function submit(forceMode, echoText){
