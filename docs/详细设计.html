@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone Bot 详细设计 v0.40</title>
+<title>QPhone Bot 详细设计 v0.42</title>
 <style>/* ============================================================================
    ShonnQ Corp · 默认视觉主题（科技简约 · 暗底星空）
    v1.0 · 2026-10-27 · 正本
@@ -236,130 +236,89 @@ a:hover{border-bottom-color:var(--acc)}
 <header class="hero">
   <div class="kicker">ShonnQ Corp · 详细设计</div>
   <h1>QPhone Bot 详细设计</h1>
-  <div class="docmeta"><span>版本：v0.40</span>
-  <span>日期：2026-10-23</span>
+  <div class="docmeta"><span>版本：v0.42</span>
+  <span>日期：2026-10-27</span>
   <span>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></span></div>
 </header>
 
-<section class="card"><h2>1. 引言</h2>
-<h3>1.1 编写目的</h3>
-<p>本文说明第一部云机和它旁边的控制程序怎么摆、怎么调用。编码以此为准。没核实的不写成已有程序。</p>
-<h3>1.2 文档约定</h3>
-<p>中小项目，章节按详细设计说明书保留，空话不写。未跑过的不写能用。对照环境不写成运行程序。</p>
-<h3>1.3 适用范围</h3>
-<p>第一部。一部云机。执行目标 = 本机 redroid 13 容器（<code>localhost:5556</code>，colima VM 内跑）。天翼云手机与本机 AVD 模拟器两种载体<strong>已排除并清理</strong>（2026-10-26），只留 redroid。不含多部、真机、把能力编进系统镜像。</p>
-<h3>1.4 参考资料</h3>
-<table>
-<thead>
-<tr>
-<th>名称</th>
-<th>来源</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>详细设计说明书模板</td>
-<td><code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></td>
-</tr>
-<tr>
-<td>产品方向</td>
-<td><code>~/目标/事业/QPhone Bot/产品方向-2026-10-16.md</code></td>
-</tr>
-<tr>
-<td>设计意见</td>
-<td><code>docs/设计意见.md</code></td>
-</tr>
-<tr>
-<td>Mobilerun 框架</td>
-<td>https://github.com/droidrun/mobilerun （MIT）</td>
-</tr>
-</tbody>
-</table>
-</section><section class="card"><h2>2. 综合描述</h2>
-<h3>2.1 系统目标</h3>
-<p><strong>一句话</strong>：一部 24×7 嘅云 Android 手机 + 三条任务。人讲一句，云机做完，回一句<strong>有证据</strong>嘅结果。屏幕不是主界面。</p>
-<p><strong>要跑通嘅就三条</strong>（详 <code>docs/落地目标清单.md</code>，2026-10-27 定稿，唔再加）</p>
+<section class="card"><h2>1. 综合描述</h2>
+<h3>1.1 系统目标</h3>
+<p>跑通以下几个通用场景，达到「一部 24×7 的云 Android 手机：人讲一句，云机做完，回一句有证据的结果」。</p>
 <table>
 <thead>
 <tr>
 <th>编号</th>
 <th>场景</th>
-<th>判定（adb 机核，唔靠模型自述）</th>
+<th>判定方式（用 adb 核对，不靠模型自述）</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><strong>G1</strong></td>
-<td>开音乐 App → 目标歌单 → 指定歌 → 点播</td>
-<td><code>dumpsys media_session</code>：state = PLAYING，且 title 命中歌名</td>
+<td>打开音乐 App，进入目标歌单，找到指定歌曲并开始播放</td>
+<td><code>dumpsys media_session</code> 显示 <code>state = PLAYING</code>，并且 <code>title</code> 与歌名相符</td>
 </tr>
 <tr>
 <td><strong>G2</strong></td>
-<td>只有移动端嘅 App → 发带图动态（Soul 只系例子）</td>
-<td>回「我的 → 动态」列表，snapshot 命中本次文字 + 带图</td>
+<td>打开只有移动端的 App，发布一条带图片的动态（Soul 只是一个例子）</td>
+<td>回到「我的 → 动态」列表后，snapshot 能取到本次发布的文字，并且该条带图</td>
 </tr>
 <tr>
 <td><strong>G3</strong></td>
-<td>教育类 App → 做题 / 考试</td>
-<td>结果页见到得分 / 已交卷，或列表状态 未做 → 已完成</td>
+<td>打开教育类 App，完成做题或考试</td>
+<td>结果页出现得分或「已交卷」，或者列表状态从「未做」变成「已完成」</td>
 </tr>
 </tbody>
 </table>
-<p><strong>三条共同底线</strong><br>
-1. 判定一律 adb 机核（<code>media_session</code> / snapshot 文本 / 列表状态），<strong>唔信模型讲「做完」</strong><br>
-2. 有确定性路径就唔落 L2；落 L2 要有步数上限<br>
-3. 登录、验证码、滑块、人脸 —— 一律弹接管，程序唔硬闯</p>
-<p><strong>唔喺目标内</strong>（防止范围再膨胀）：有网页 / 有 API 嘅平台（走 API，唔用云机）· 听写口语拍照上传（云机冇麦克风、冇摄像头）· 主观题代写 · 「咩都做到」嘅通用 agent。</p>
-<p><strong>共同卡口</strong>：三个场景都要登录（手机号 + 验证码），且都系新设备异地登录。所以第一步系「登录态准备」，唔系写码。</p>
-<h3>2.2 系统概述</h3>
-<p>三块，调用方向固定。</p>
+<h3>1.2 系统概述</h3>
+<p>系统由三部分组成，调用方向固定：人 → 客户端 → 控制程序 → 云机。屏幕不是主界面，只有需要时人才去看云机的画面。</p>
 <table>
 <thead>
 <tr>
 <th>程序</th>
 <th>位置</th>
-<th>现在</th>
+<th>现状</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>客户端</td>
-<td>薄壳，形态未定（2026-10-22 删 Rakazo）</td>
-<td>未建。只发交代、只收进度与结果，不含 agent、不带电脑容器。</td>
+<td>薄壳，形态尚未确定（2026-10-22 已删掉 Rakazo 方案）</td>
+<td>未建。它只负责发出任务、接收进度和结果，内部不包含 agent，也不带电脑容器。</td>
 </tr>
 <tr>
 <td>控制程序</td>
-<td>近云机一侧（正式在 Ubuntu 虚拟机；临时在 Mac）</td>
-<td>未接。框架定 Mobilerun。</td>
+<td>部署在靠近云机的一侧（正式环境放 Ubuntu 虚拟机，临时放在 Mac 上）</td>
+<td>尚未接通，框架定为 Mobilerun。</td>
 </tr>
 <tr>
 <td>云机</td>
-<td>redroid 13 容器（<code>localhost:5556</code>，唯一执行目标）</td>
-<td>已实测可操作：装 Portal；L0/L1a/L1b/L2 四层落地（L0 0.3–0.4 s、L1a 1.4–1.7 s、L1b 约 50 ms、L2 16–26 s）。</td>
+<td>redroid 13 容器（<code>localhost:5556</code>，目前唯一的执行目标）</td>
+<td>已实测可以操作：Portal 已装，L0/L1a/L1b/L2 四层已落地（L0 0.3–0.4 s、L1a 1.4–1.7 s、L1b 约 50 ms、L2 16–26 s）。</td>
 </tr>
 </tbody>
 </table>
-<p>客户端只管收和发。操作发生在控制程序一侧：它调本机（或转发口）adb。人要看屏幕时在云机一侧看，不把画面转到客户端。</p>
-<h3>2.3 运行环境</h3>
+<p>客户端只负责收和发。真正的操作发生在控制程序一侧：它调用本机 adb（或通过转发口）下发命令。人需要看屏幕时，直接看云机一侧的画面，系统不会把画面转发到客户端。</p>
+<h3>1.3 运行环境</h3>
 <table>
 <thead>
 <tr>
-<th>项</th>
-<th>现状（2026-10-26 起，唯一执行目标）</th>
+<th>项目</th>
+<th>现状（2026-10-26 起，这是目前唯一的执行目标）</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>宿主</td>
-<td>macarm，colima VM（Ubuntu 24.04 / 内核 <code>6.8.0-117-generic</code> / aarch64）</td>
+<td>macarm，colima 虚拟机（Ubuntu 24.04 / 内核 <code>6.8.0-117-generic</code> / aarch64）</td>
 </tr>
 <tr>
 <td>内存</td>
-<td>VM 内只稳开一部云机，不并行第二部</td>
+<td>虚拟机内只能稳定开一部云机，不能并行开第二部</td>
 </tr>
 <tr>
 <td>云机镜像</td>
-<td><code>redroid/redroid:13.0.0_64only-latest</code>（arm64；必须 <code>_64only</code>，普通版带 32 位 vendor 二进制，init 自检即失败）</td>
+<td><code>redroid/redroid:13.0.0_64only-latest</code>（arm64；必须用 <code>_64only</code> 版本，普通版本带 32 位 vendor 二进制，init 自检就会失败）</td>
 </tr>
 <tr>
 <td>云机系统</td>
@@ -367,19 +326,19 @@ a:hover{border-bottom-color:var(--acc)}
 </tr>
 <tr>
 <td>云机入口</td>
-<td><code>localhost:5556</code> → 容器内 5555；起停用 <code>scripts/redroid-up.sh</code>（<code>up</code> / <code>down</code> / <code>status</code>）</td>
+<td><code>localhost:5556</code> 转发到容器内 5555；启动和停止用 <code>scripts/redroid-up.sh</code>（<code>up</code> / <code>down</code> / <code>status</code>）</td>
 </tr>
 <tr>
 <td>控制程序</td>
-<td>Mac 本机 <code>python3 serve.py</code>（<code>127.0.0.1:8777</code>），<code>QPHONE_TARGET</code> 默认值即 <code>localhost:5556</code></td>
+<td>Mac 本机运行 <code>python3 serve.py</code>（<code>127.0.0.1:8777</code>），<code>QPHONE_TARGET</code> 的默认值就是 <code>localhost:5556</code></td>
 </tr>
 <tr>
 <td>客户端</td>
-<td>薄壳，形态未定。候选：Telegram / Hermes 桌面顶，或自写 Tauri/Electron 薄壳</td>
+<td>薄壳，形态尚未确定。候选方案：Telegram、Hermes 桌面顶栏，或者自己写一个 Tauri/Electron 薄壳</td>
 </tr>
 </tbody>
 </table>
-<h3>2.4 程序结构说明</h3>
+<h3>1.4 程序结构说明</h3>
 <table>
 <thead>
 <tr>
@@ -391,46 +350,46 @@ a:hover{border-bottom-color:var(--acc)}
 <tbody>
 <tr>
 <td>客户端薄壳</td>
-<td>未建，形态未定</td>
+<td>未建，形态尚未确定</td>
 <td>人</td>
 </tr>
 <tr>
 <td>控制程序</td>
-<td>Mobilerun（Python 包，跑在控制机）+ <code>qphone.py</code> 配套层</td>
-<td>接收客户端来的交代；调云机 adb</td>
+<td>Mobilerun（Python 包，跑在控制机上）加上 <code>qphone.py</code> 配套层</td>
+<td>接收客户端发来的任务，调用云机的 adb</td>
 </tr>
 <tr>
 <td>路由器</td>
-<td><code>serve.py</code> 内 <code>classify()</code> + <code>layers.route()</code>（2026-10-26 落地）</td>
-<td>把一句交代分到对话 / L0 / L1a / L1b / L2</td>
+<td><code>serve.py</code> 内的 <code>classify()</code> 和 <code>layers.route()</code>（2026-10-26 落地）</td>
+<td>把一句话分派给对话、L0、L1a、L1b 或 L2</td>
 </tr>
 <tr>
 <td>L1 工具</td>
-<td><code>agent-device</code> CLI（MIT，常驻 android-helper）</td>
-<td>路由器在 L1 阶段调用；也可自建 helper</td>
+<td><code>agent-device</code> 命令行工具（MIT 许可，常驻 android-helper）</td>
+<td>路由器在 L1 阶段调用，也可以换成自建的 helper</td>
 </tr>
 <tr>
 <td>Portal APK</td>
-<td>Android 应用，装云机上</td>
-<td>被 Mobilerun 调用，提供无障碍树与点击</td>
+<td>装在云机上的 Android 应用</td>
+<td>被 Mobilerun 调用，提供无障碍树和点击能力</td>
 </tr>
 <tr>
 <td>redroid 13 容器</td>
-<td>现成（<code>localhost:5556</code>）</td>
-<td>控制程序，经 adb</td>
+<td>现成镜像（<code>localhost:5556</code>）</td>
+<td>控制程序通过 adb 操作它</td>
 </tr>
 </tbody>
 </table>
-<h3>2.5 源程序及编译链接组装说明</h3>
-<p>第一部云机不在这台机上编译，用官方镜像（或租用实例）直接跑。</p>
-<p>这台虚拟机可以编译。A9 就是在这里编译出来的，编译产物不删。那是对照，不是这一部的组装方式。</p>
-<p>控制程序源码在 <code>~/projects/qphone-bot-dev</code>（暂定名），入口 <code>qphone.py</code>：零依赖 adb 薄壳，只做容器起停、开机状态、端口发现、装包、截图，不做决策。Mobilerun 用 <code>uv tool install mobilerun</code> 装入，agent 决策由它做。仓库名与许可证见附录 B4。</p>
-</section><section class="card"><h2>3. 系统详细设计</h2>
+<h3>1.5 源程序及编译链接组装说明</h3>
+<p>第一部云机不在这台机器上编译，而是直接使用官方镜像（或租用实例）运行。</p>
+<p>这台虚拟机本身可以编译，A9 就是在这里编译出来的，编译产物会保留。不过 A9 只用作对照，不是这一部的组装方式。</p>
+<p>控制程序的源码在 <code>~/projects/qphone-bot-dev</code>（名字暂定），入口是 <code>qphone.py</code>：一个不依赖第三方库的 adb 薄壳，只负责容器起停、开机状态、端口发现、装包和截图，不做决策。Mobilerun 通过 <code>uv tool install mobilerun</code> 安装，agent 的决策由它完成。仓库名和许可证见附录 B4。</p>
+</section><section class="card"><h2>2. 系统详细设计</h2>
 <h3>架构总览 · 执行分层</h3>
 <blockquote>
-<p>一句交代按「能唔能确定」由上往下用：<strong>L0 确定性命令 → L1a 无障碍树 → L1b WebView CDP → L2 视觉兜底</strong>。<br>
-视觉只做兜底，负责步数压到 1–2 步；判定细则、实测与落地见 §3.4。</p>
-<p>原架构图 v0.8 已于 2026-10-26 并入本文，架构图只此一份（旧 <code>架构图.html</code> 已删除）。</p>
+<p>用户的一句话交代进来以后，按「能不能确定」这个标准从上往下依次尝试：<strong>L0 确定性命令 → L1a 无障碍树 → L1b WebView CDP → L2 视觉兜底</strong>。<br>
+视觉只承担兜底的角色，作用是把失败的步数压到 1–2 步。判定细则、实测数据和落地情况见 §2.4。</p>
+<p>原架构图 v0.8 已于 2026-10-26 并入本文，架构图只保留这一份（旧的 <code>架构图.html</code> 已删除）。</p>
 </blockquote>
 <div class="archfig">
 
@@ -450,8 +409,8 @@ a:hover{border-bottom-color:var(--acc)}
     </marker>
   </defs>
   <rect width="1040" height="870" fill="url(#grid2)"/>
-  <text x="24" y="26" fill="#e2e8f0" font-size="13" font-weight="600">执行分层 · 一句交代去边一层</text>
-  <text x="24" y="44" fill="#64748b" font-size="9">按「能唔能确定」由上往下用；视觉只做兜底，负责步数压到 1–2 步</text>
+  <text x="24" y="26" fill="#e2e8f0" font-size="13" font-weight="600">执行分层 · 一句话落到哪一层</text>
+  <text x="24" y="44" fill="#64748b" font-size="9">按「能不能确定」由上往下用；视觉只做兜底，把步数压到 1–2 步</text>
 
   <!-- 用户 → 壳 -->
   <rect x="336" y="58" width="368" height="54" rx="6" fill="#0f172a"/>
@@ -463,8 +422,8 @@ a:hover{border-bottom-color:var(--acc)}
   <rect x="270" y="142" width="500" height="62" rx="6" fill="#0f172a"/>
   <rect x="270" y="142" width="500" height="62" rx="6" fill="rgba(251,146,60,0.22)" stroke="#fb923c" stroke-width="1.5"/>
   <text x="520" y="165" fill="#e2e8f0" font-size="12" text-anchor="middle">路由器 · classify() + 执行路由</text>
-  <text x="520" y="182" fill="#fdba74" font-size="9" text-anchor="middle">对话 / 任务判唔清先反问　·　任务再分四层　·　规则本地跑，0 模型</text>
-  <text x="520" y="196" fill="#94a3b8" font-size="8" text-anchor="middle">命中能力表 → L0；否则 L1a；WebView → L1b；都唔识 → L2</text>
+  <text x="520" y="182" fill="#fdba74" font-size="9" text-anchor="middle">对话 / 任务判不清先反问　·　任务再分四层　·　规则本地跑，0 模型</text>
+  <text x="520" y="196" fill="#94a3b8" font-size="8" text-anchor="middle">命中能力表 → L0；否则 L1a；WebView → L1b；都不认识 → L2</text>
 
   <!-- 连线：壳→路由器 -->
   <path d="M520 112 V142" stroke="#94a3b8" stroke-width="1.5" fill="none" marker-end="url(#a2)"/>
@@ -489,16 +448,16 @@ a:hover{border-bottom-color:var(--acc)}
   <rect x="296" y="244" width="232" height="104" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
   <text x="412" y="268" fill="#e2e8f0" font-size="12" text-anchor="middle">L1a 无障碍树</text>
   <text x="412" y="286" fill="#67e8f9" font-size="9" text-anchor="middle">常驻 helper · text / id / bounds</text>
-  <text x="412" y="301" fill="#94a3b8" font-size="8.5" text-anchor="middle">按节点动作，唔靠坐标</text>
+  <text x="412" y="301" fill="#94a3b8" font-size="8.5" text-anchor="middle">按节点操作，不靠坐标</text>
   <text x="412" y="320" fill="#67e8f9" font-size="10" text-anchor="middle">实测 1.4–1.7 s／步</text>
-  <text x="412" y="336" fill="#94a3b8" font-size="8" text-anchor="middle">裸 dump 2.3 s，故必须常驻</text>
+  <text x="412" y="336" fill="#94a3b8" font-size="8" text-anchor="middle">裸 dump 2.3 s，因此必须常驻</text>
 
   <!-- L1b -->
   <rect x="544" y="244" width="232" height="104" rx="6" fill="#0f172a"/>
   <rect x="544" y="244" width="232" height="104" rx="6" fill="rgba(76,29,149,0.28)" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5 4"/>
   <text x="660" y="268" fill="#e2e8f0" font-size="12" text-anchor="middle">L1b WebView CDP</text>
   <text x="660" y="286" fill="#c4b5fd" font-size="9" text-anchor="middle">DOM 查询 · Input.insertText</text>
-  <text x="660" y="301" fill="#94a3b8" font-size="8.5" text-anchor="middle">中文直注入，唔经 IME</text>
+  <text x="660" y="301" fill="#94a3b8" font-size="8.5" text-anchor="middle">中文直接注入，不经过 IME</text>
   <text x="660" y="320" fill="#c4b5fd" font-size="10" text-anchor="middle">实测 41–56 ms／点 · 填 32 ms</text>
   <text x="660" y="336" fill="#94a3b8" font-size="8" text-anchor="middle">限：App 要开 webContentsDebugging</text>
 
@@ -509,18 +468,18 @@ a:hover{border-bottom-color:var(--acc)}
   <text x="892" y="286" fill="#fcd34d" font-size="9" text-anchor="middle">截图 + 多模态模型</text>
   <text x="892" y="301" fill="#94a3b8" font-size="8.5" text-anchor="middle">Mobilerun · 上限 20 步</text>
   <text x="892" y="320" fill="#fcd34d" font-size="10" text-anchor="middle">实测 16–26 s／单</text>
-  <text x="892" y="336" fill="#94a3b8" font-size="8" text-anchor="middle">只在前两层失手先开</text>
+  <text x="892" y="336" fill="#94a3b8" font-size="8" text-anchor="middle">只在前两层都失手时才启用</text>
 
   <!-- 降级链 -->
   <path d="M280 296 H290" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="3 3" fill="none" marker-end="url(#a2g)"/>
   <path d="M528 296 H538" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="3 3" fill="none" marker-end="url(#a2g)"/>
   <path d="M776 296 H786" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="3 3" fill="none" marker-end="url(#a2g)"/>
-  <text x="520" y="366" fill="#4b5563" font-size="8.5" text-anchor="middle">降级：每层只试一次，失手即下一层；L2 仍失败 → 要人（附最后截图 + 已做动作）</text>
+  <text x="520" y="366" fill="#4b5563" font-size="8.5" text-anchor="middle">降级：每层只试一次，失手就换下一层；L2 仍然失败则要人接手（附最后截图 + 已做动作）</text>
 
   <!-- 云机：四手一列 + 右边云机 UI -->
   <rect x="48" y="380" width="944" height="322" rx="7" fill="#0b1220"/>
   <rect x="48" y="380" width="944" height="322" rx="7" fill="rgba(120,53,15,0.18)" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="8 4"/>
-  <text x="64" y="404" fill="#fcd34d" font-size="9.5" font-weight="600">云机 · Android 13 · redroid（localhost:5556）—— 四只手竖排，右边就系它们共同落嘅地方</text>
+  <text x="64" y="404" fill="#fcd34d" font-size="9.5" font-weight="600">云机 · Android 13 · redroid（localhost:5556）—— 四条通道竖排，右边就是它们共同落到的地方</text>
 
   <!-- 手 1：adbd -->
   <rect x="60" y="416" width="516" height="62" rx="5" fill="#0f172a" stroke="#34d399" stroke-width="1.2"/>
@@ -531,19 +490,19 @@ a:hover{border-bottom-color:var(--acc)}
   <!-- 手 2：snapshothelper -->
   <rect x="60" y="486" width="516" height="62" rx="5" fill="#0f172a" stroke="#34d399" stroke-width="1.2" stroke-dasharray="6 3"/>
   <text x="74" y="506" fill="#e2e8f0" font-size="10.5" font-weight="600">snapshothelper APK</text>
-  <text x="74" y="522" fill="#86efac" font-size="8.5">L1a 专用　·　agent-device 自己装喺机内</text>
+  <text x="74" y="522" fill="#86efac" font-size="8.5">L1a 专用　·　agent-device 自己装在机内</text>
   <text x="74" y="537" fill="#94a3b8" font-size="8">com.callstack.agentdevice.snapshothelper v0.21.31 · 出无障碍树 + 派发点击</text>
 
   <!-- 手 3：WebView socket -->
   <rect x="60" y="556" width="516" height="62" rx="5" fill="#0f172a" stroke="#a78bfa" stroke-width="1.2" stroke-dasharray="6 3"/>
   <text x="74" y="576" fill="#e2e8f0" font-size="10.5" font-weight="600">WebView 调试 socket</text>
-  <text x="74" y="592" fill="#c4b5fd" font-size="8.5">L1b 入口　·　条件：App 自己开咗调试</text>
+  <text x="74" y="592" fill="#c4b5fd" font-size="8.5">L1b 入口　·　条件：App 自己开了调试</text>
   <text x="74" y="607" fill="#94a3b8" font-size="8">@webview_devtools_remote_&lt;pid&gt; → adb forward → /json → CDP</text>
 
   <!-- 手 4：Portal -->
   <rect x="60" y="626" width="516" height="62" rx="5" fill="#0f172a" stroke="#fbbf24" stroke-width="1.2"/>
   <text x="74" y="646" fill="#e2e8f0" font-size="10.5" font-weight="600">Portal APK · com.mobilerun.portal</text>
-  <text x="74" y="662" fill="#fcd34d" font-size="8.5">L2 专用　·　四层之中唯一用 Portal 嗰层</text>
+  <text x="74" y="662" fill="#fcd34d" font-size="8.5">L2 专用　·　四层之中唯一使用 Portal 的一层</text>
   <text x="74" y="677" fill="#94a3b8" font-size="8">MobilerunAccessibilityService（读树）· MobilerunContentProvider（dispatchGesture）</text>
 
   <!-- 四手 → 云机 UI（并排） -->
@@ -556,9 +515,9 @@ a:hover{border-bottom-color:var(--acc)}
   <text x="793" y="524" fill="#e2e8f0" font-size="12.5" font-weight="600" text-anchor="middle">云机 UI · 前台 App</text>
   <text x="793" y="546" fill="#86efac" font-size="9" text-anchor="middle">被点组件 / 被填输入框</text>
   <text x="793" y="566" fill="#94a3b8" font-size="8.5" text-anchor="middle">Settings · 印象笔记 · 应用宝 …</text>
-  <text x="793" y="586" fill="#64748b" font-size="8" text-anchor="middle">四只手最终都落喺呢度</text>
+  <text x="793" y="586" fill="#64748b" font-size="8" text-anchor="middle">四条通道最终都落在这里</text>
 
-  <text x="64" y="722" fill="#64748b" font-size="7.5">坑：adb shell input text 打中文 → NullPointerException，中文一律走 IME 或 CDP。　adb forward 按 socket 复用、app 死即清（旧版积过 11 条）。</text>
+  <text x="64" y="722" fill="#64748b" font-size="7.5">坑：adb shell input text 输入中文会报 NullPointerException，所以中文一律走 IME 或 CDP。　adb forward 按 socket 复用，app 一死就清（旧版曾经积过 11 条）。</text>
 
   <!-- 四层 → 云机（止于框顶） -->
   <path d="M164 348 V378" stroke="#34d399" stroke-width="1.4" fill="none" marker-end="url(#a2)"/>
@@ -574,7 +533,7 @@ a:hover{border-bottom-color:var(--acc)}
   <text x="520" y="808" fill="#94a3b8" font-size="8.5" text-anchor="middle">运行时亦可为第三方 WebView 打开调试开关（root 权限范围内）</text>
   <path d="M520 730 V748" stroke="#fb7185" stroke-width="1.4" stroke-dasharray="5 4" fill="none" marker-end="url(#a2g)"/>
 
-  <text x="24" y="850" fill="#64748b" font-size="9">实线 = 第一版要通　　紫虚线 = 有条件（要 App 自己开调试）　　红虚线 = 远期，唔喺这周施工图　　灰虚线 = 降级次序</text>
+  <text x="24" y="850" fill="#64748b" font-size="9">实线 = 第一版要打通　　紫虚线 = 有条件（要 App 自己开调试）　　红虚线 = 远期，不在本周施工图内　　灰虚线 = 降级次序</text>
 </svg>
 
 </div>
@@ -589,59 +548,59 @@ a:hover{border-bottom-color:var(--acc)}
 <tbody>
 <tr>
 <td><strong>用户看见的</strong></td>
-<td>对话，不是远程桌面；卡住才把屏幕递过来；一句话关机，状态说得清</td>
+<td>用户看到的是对话，不是远程桌面；只有卡住时才把屏幕递过来；一句话就能关机，状态也说得清楚</td>
 </tr>
 <tr>
 <td><strong>第一版要跑通的</strong></td>
-<td>一部云手机，不用手填端口；借现成项目完成装包和点一步；另一台干净机器按文档能复现</td>
+<td>一部云手机，不需要用户手填端口；借用现成项目完成装包和点一步操作；换一台干净机器按文档能复现</td>
 </tr>
 <tr>
 <td><strong>不在这张图里承诺的</strong></td>
-<td>集群、移动端、Windows；容器二选一已经定死；系统服务这周就编进镜像</td>
+<td>集群、移动端、Windows 都不在范围内；容器方案二选一已经定死；系统服务这周就编进镜像</td>
 </tr>
 </tbody>
 </table>
-<p><strong>每层自己只手</strong>（四只手各管各，互不依赖）</p>
+<p><strong>每一层各自有一条通道</strong>（四条通道各管各的，互不依赖）</p>
 <table>
 <thead>
 <tr>
 <th>层</th>
-<th>自己只手</th>
-<th>通道</th>
+<th>自有通道</th>
+<th>具体命令</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>L0</td>
-<td><strong>adbd</strong>（系统命令，唔使装任何嘢）</td>
+<td><strong>adbd</strong>（系统命令，不需要安装任何东西）</td>
 <td><code>am start</code> / <code>am force-stop</code> / <code>pm uninstall</code> / <code>pm clear</code> / <code>pm list packages</code> / <code>settings put</code> / <code>input</code></td>
 </tr>
 <tr>
 <td>L1a</td>
 <td><strong>snapshothelper</strong>（机内无障碍 helper <code>com.callstack.agentdevice.snapshothelper</code> v0.21.31）</td>
-<td><code>adbd</code> 叫佢出无障碍树 + 派发点击</td>
+<td><code>adbd</code> 让它输出无障碍树，并派发点击</td>
 </tr>
 <tr>
 <td>L1b</td>
-<td><strong>WebView 调试 socket</strong>（页面本体，唔使额外组件）</td>
+<td><strong>WebView 调试 socket</strong>（页面本身，不需要额外组件）</td>
 <td><code>@webview_devtools_remote_&lt;pid&gt;</code> → <code>adb forward</code> → CDP <code>Runtime.evaluate</code> / <code>Input.insertText</code></td>
 </tr>
 <tr>
 <td>L2</td>
 <td><strong>Portal</strong>（<code>com.mobilerun.portal</code>）</td>
-<td><code>MobilerunAccessibilityService</code> 读树 + <code>MobilerunContentProvider</code> 走无障碍 <code>dispatchGesture</code></td>
+<td><code>MobilerunAccessibilityService</code> 读树，加上 <code>MobilerunContentProvider</code> 通过无障碍接口 <code>dispatchGesture</code> 派发手势</td>
 </tr>
 </tbody>
 </table>
-<p>推论（排查用）：四只手各自独立 —— <code>snapshothelper</code> 死只废 L1a；WebView socket 冇（App 冇开调试）只废 L1b；Portal 死只废 L2；L0 靠 adbd，前三只死都唔影响。</p>
-<h3>3.1 云机</h3>
-<h4>3.1.1 程序特征</h4>
-<p>现成容器，镜像 <code>redroid/redroid:13.0.0_64only-latest</code>（arm64），不是本项目编译出来的可执行文件。<br>
-唯一执行目标：<code>localhost:5556</code> → 容器内 5555，由 <code>scripts/redroid-up.sh</code> 起停。<br>
-已排除（2026-10-26）：本机 AVD 模拟器（已删）、天翼云手机（不再使用）。</p>
-<h4>3.1.2 功能</h4>
-<p>提供一部可操作的 Android。装应用、打开应用、接受点击、给出画面，都通过 adb。不在云机里放控制逻辑。</p>
-<h4>3.1.3 输入 / 输出</h4>
+<p>推论（用于排查）：四条通道彼此独立——<code>snapshothelper</code> 挂掉只会让 L1a 失效；WebView socket 不存在（App 没有开调试）只会让 L1b 失效；Portal 挂掉只会让 L2 失效；L0 依赖 adbd，即使前三条全部挂掉也不受影响。</p>
+<h3>2.1 云机</h3>
+<h4>2.1.1 程序特征</h4>
+<p>云机是一个现成的容器，镜像为 <code>redroid/redroid:13.0.0_64only-latest</code>（arm64），它不是本项目编译出来的可执行文件。<br>
+唯一需要连的地址是 <code>localhost:5556</code>，它对应容器内的 5555 端口，由 <code>scripts/redroid-up.sh</code> 负责启动和停止。<br>
+已经排除的载体（2026-10-26）：本机 AVD 模拟器（已删除）、天翼云手机（不再使用）。</p>
+<h4>2.1.2 功能</h4>
+<p>云机提供一部可以操作的 Android 设备。安装应用、打开应用、接受点击、输出画面，全部通过 adb 完成。控制逻辑不放在云机里。</p>
+<h4>2.1.3 输入 / 输出</h4>
 <table>
 <thead>
 <tr>
@@ -659,42 +618,42 @@ a:hover{border-bottom-color:var(--acc)}
 <tr>
 <td>输入</td>
 <td><code>adb install</code></td>
-<td>安装指定安装包</td>
+<td>安装指定的安装包</td>
 </tr>
 <tr>
 <td>输入</td>
 <td><code>adb shell input</code></td>
-<td>点击、按键</td>
+<td>执行点击和按键</td>
 </tr>
 <tr>
 <td>输入</td>
 <td><code>adb shell am</code></td>
-<td>打开应用</td>
+<td>启动应用</td>
 </tr>
 <tr>
 <td>输出</td>
 <td>命令返回</td>
-<td>成功或失败原因</td>
+<td>返回成功，或者返回失败原因</td>
 </tr>
 <tr>
 <td>输出</td>
 <td><code>screencap</code></td>
-<td>当前画面。给人接手时用，不作为主界面</td>
+<td>当前画面，只在需要人接手时使用，不作为主界面</td>
 </tr>
 </tbody>
 </table>
-<p>不向客户端提供屏幕和控制入口。</p>
-<h4>3.1.4 数据结构</h4>
-<p>数据在 <strong>Docker 命名卷 <code>qphone-data</code></strong>（住在 VM 的 ext4 上），抹掉容器数据仍在；要清空 <code>docker volume rm qphone-data</code>。</p>
-<p><strong>为什么不用宿主目录</strong>：<code>-v ~/redroid13-data:/data</code> 会经 colima 的 virtiofs，<code>/data</code> 变成 <code>type virtiofs</code>；Android vold 要 ext4 project quota（<code>FS_IOC_FSGETXATTR</code>），virtiofs 回 <code>Inappropriate ioctl for device</code>，于是 <code>StorageManager</code> / <code>MediaProvider</code> 一路报存储有问题。实测换成命名卷后 <code>/data</code> 是 <code>type ext4</code>、错误条数 0。</p>
-<p>⚠ 变量名撞车：<code>REDROID_DATA</code>（宿主目录，调试用）与 <code>REDROID_DATA_VOLUME</code>（默认 <code>qphone-data</code>）。<strong>默认走卷</strong>，只有显式给 <code>REDROID_DATA</code> 才用宿主目录。</p>
-<h4>3.1.5 调用关系</h4>
-<p>被控制程序调用。不被客户端调用。</p>
-<h4>3.1.6 算法</h4>
-<p>无自有算法。</p>
-<h4>3.1.7 限制</h4>
-<p>一部。VM 内不并行开第二部。端口用 <code>5556</code>（<code>5555</code> 曾被本机 AVD 占用，虽然 AVD 已删，但端口沿用，避免与「<code>5555</code> 其实是模拟器」的旧认知混淆）。<strong>redroid 无 GMS</strong>，依赖 Play 服务的 App 装得上但跑唔起，要另配 OpenGApps。<code>adb shell input text</code> 打中文仍 NPE。</p>
-<h4>3.1.8 载体实测对照（历史记录；AVD / 天翼云已排除）</h4>
+<p>云机不向客户端提供屏幕画面，也不提供控制入口。</p>
+<h4>2.1.4 数据结构</h4>
+<p>数据存放在 <strong>Docker 命名卷 <code>qphone-data</code></strong> 里（该卷位于 VM 的 ext4 文件系统上），即使删掉容器，数据依然存在；要清空数据则执行 <code>docker volume rm qphone-data</code>。</p>
+<p><strong>为什么不用宿主目录</strong>：如果改成 <code>-v ~/redroid13-data:/data</code> 挂载宿主目录，读写就要经过 colima 的 virtiofs，<code>/data</code> 会变成 <code>type virtiofs</code>。Android 的 vold 需要 ext4 的 project quota（<code>FS_IOC_FSGETXATTR</code>），而 virtiofs 会返回 <code>Inappropriate ioctl for device</code>，于是 <code>StorageManager</code> 和 <code>MediaProvider</code> 会一路报存储有问题。实测换成命名卷之后，<code>/data</code> 是 <code>type ext4</code>，错误条数为 0。</p>
+<p>⚠ 两个变量名容易混淆：<code>REDROID_DATA</code>（宿主目录，调试用）与 <code>REDROID_DATA_VOLUME</code>（默认为 <code>qphone-data</code>）。<strong>默认走命名卷</strong>，只有显式传入 <code>REDROID_DATA</code> 才会使用宿主目录。</p>
+<h4>2.1.5 调用关系</h4>
+<p>云机由控制程序调用，客户端不会直接调用它。</p>
+<h4>2.1.6 算法</h4>
+<p>云机没有自己的算法。</p>
+<h4>2.1.7 限制</h4>
+<p>只开一部。同一个 VM 内不会并行启动第二部。端口固定用 <code>5556</code>（<code>5555</code> 曾经被本机 AVD 占用；虽然 AVD 已经删除，仍然沿用 <code>5556</code>，以免和「<code>5555</code> 其实是模拟器」的旧认知混淆）。<strong>redroid 没有 GMS</strong>，依赖 Play 服务的 App 虽然装得上，但运行不起来，需要另外配置 OpenGApps。<code>adb shell input text</code> 输入中文仍然会触发 NPE。</p>
+<h4>2.1.8 载体实测对照（历史记录；AVD / 天翼云已排除）</h4>
 <table>
 <thead>
 <tr>
@@ -731,15 +690,15 @@ a:hover{border-bottom-color:var(--acc)}
 </tr>
 <tr>
 <td>L2 一单「打开设置」</td>
-<td>20 步未完</td>
+<td>20 步未完成</td>
 <td>3 步 / 30 s</td>
 <td><strong>2 步 / 16.3 s</strong></td>
 </tr>
 </tbody>
 </table>
-<p>结论：redroid 最快；<code>uiautomator dump</code> 约 2 s、L2 单步 7–8 s 系 Android 与模型侧成本，换设备唔变 —— 所以 L0 优先、L1 常驻、L2 只兜底。</p>
-<p>redroid 四个坑（实测）：① 必须 <code>_64only</code> 镜像（普通版 32 位 vendor 二进制 → <code>Exec format error</code> → 容器 Exited 129）；② <code>modprobe binder_linux</code> 只令 <code>/proc/filesystems</code> 出现 binder，要 <code>mount -t binder binder /dev/binderfs</code> 才产节点；③ 节点默认 600，容器内要 <code>chmod 666</code>；④ 绑节点用 <code>-v</code>，<code>--device</code> 会 ENXIO。前置：VM 要装 <code>linux-modules-extra</code>，启动参数加 <code>androidboot.use_memfd=true</code>（5.18+ 无 ashmem）。整套已封成 <code>scripts/redroid-up.sh</code>。</p>
-<h4>3.1.9 存储（/data）</h4>
+<p>结论：redroid 最快；<code>uiautomator dump</code> 约 2 s、L2 单步 7–8 s 是 Android 和模型侧的成本，换设备也不会改变——所以 L0 优先、L1 常驻、L2 只做兜底。</p>
+<p>redroid 有四个坑（均为实测）：① 必须使用 <code>_64only</code> 镜像（普通版带 32 位 vendor 二进制，会报 <code>Exec format error</code>，容器以 Exited 129 退出）；② <code>modprobe binder_linux</code> 只会让 <code>/proc/filesystems</code> 里出现 binder，还需要执行 <code>mount -t binder binder /dev/binderfs</code> 才会生成设备节点；③ 节点默认权限是 600，容器内要把它改成 <code>chmod 666</code>；④ 绑定节点要用 <code>-v</code>，用 <code>--device</code> 会返回 ENXIO。前置条件是：VM 要安装 <code>linux-modules-extra</code>，启动参数要加上 <code>androidboot.use_memfd=true</code>（5.18 以上版本没有 ashmem）。整套流程已经封装成 <code>scripts/redroid-up.sh</code>。</p>
+<h4>2.1.9 存储（/data）</h4>
 <table>
 <thead>
 <tr>
@@ -758,26 +717,26 @@ a:hover{border-bottom-color:var(--acc)}
 </tr>
 <tr>
 <td>持久性</td>
-<td>删容器不丢；<code>docker volume rm qphone-data</code> 才清</td>
+<td>删除容器不会丢；只有执行 <code>docker volume rm qphone-data</code> 才会清</td>
 </tr>
 <tr>
 <td>扩容</td>
-<td>扩 colima VM 盘（<code>colima stop &amp;&amp; colima start --disk &lt;GB&gt;</code>），设备侧无需改</td>
+<td>扩容 colima VM 的磁盘（<code>colima stop &amp;&amp; colima start --disk &lt;GB&gt;</code>），设备侧不需要改动</td>
 </tr>
 <tr>
 <td>反例</td>
-<td>挂宿主目录 → virtiofs → vold 拿唔到 project id → 系统提示存储有问题（已实测）</td>
+<td>挂载宿主目录 → virtiofs → vold 拿不到 project id → 系统提示存储有问题（已实测）</td>
 </tr>
 </tbody>
 </table>
-<h3>3.2 控制程序</h3>
-<h4>3.2.1 程序特征</h4>
-<p>框架定 <strong>Mobilerun</strong>（MIT，开源 Python 包，不是它的托管云）。它本身就是手机原生 agent：带 <code>click / long_press / type / swipe / open_app / get_state / take_screenshot / complete</code> 等手机工具，看屏走无障碍树 + 截图两路。</p>
-<p>配套层 <code>qphone.py</code>（本仓库）只做 Mobilerun 不管的事：容器起停、开机状态、端口发现、装包、截图。它不做决策，也不调模型。</p>
-<h4>3.2.2 功能</h4>
-<p>接收一句交代。在云机上做完，或说出失败原因。做的过程中回报进度。需要人看屏幕时，发出要人，并停在云机一侧。做完发出结果。开机、关机的状态要说得清。</p>
-<p>人不用填端口。正式就是本机 <code>127.0.0.1:5555</code>；临时由 <code>qphone.py</code> 自动发现转发口。</p>
-<h4>3.2.3 输入 / 输出</h4>
+<h3>2.2 控制程序</h3>
+<h4>2.2.1 程序特征</h4>
+<p>框架确定为 <strong>Mobilerun</strong>（MIT 许可的开源 Python 包，不是它提供的托管云服务）。它本身就是面向手机的原生 agent，自带 <code>click / long_press / type / swipe / open_app / get_state / take_screenshot / complete</code> 等手机操作工具，观察屏幕有两条途径：无障碍树和截图。</p>
+<p>配套的 <code>qphone.py</code>（本仓库）只负责 Mobilerun 不管的事情：容器起停、开机状态、端口发现、装包和截图。它不做决策，也不调用模型。</p>
+<h4>2.2.2 功能</h4>
+<p>控制程序接收用户的一句话交代，然后在云机上把这件事做完，或者说明失败原因。执行过程中要回报进度；需要人看屏幕时，发出「要人」信号并停在云机一侧，不把画面转到客户端；做完后发出结果。开机和关机的状态也要说得清楚。</p>
+<p>用户不需要填写端口：正式环境固定用本机的 <code>127.0.0.1:5555</code>，临时环境由 <code>qphone.py</code> 自动发现转发端口。</p>
+<h4>2.2.3 输入 / 输出</h4>
 <table>
 <thead>
 <tr>
@@ -790,66 +749,66 @@ a:hover{border-bottom-color:var(--acc)}
 <tr>
 <td>输入</td>
 <td>交代</td>
-<td>来自客户端的一句话，或一个安装包 / 应用名</td>
+<td>来自客户端的一句话，或者一个安装包 / 应用名</td>
 </tr>
 <tr>
 <td>输出</td>
 <td>进度</td>
-<td>正在做哪一步</td>
+<td>当前正在做哪一步</td>
 </tr>
 <tr>
 <td>输出</td>
 <td>要人</td>
-<td>卡住。人到云机侧看屏幕，不转到客户端</td>
+<td>流程卡住时，由人到云机一侧看屏幕，画面不转到客户端</td>
 </tr>
 <tr>
 <td>输出</td>
 <td>结果</td>
-<td>做成，或失败原因</td>
+<td>任务做成，或者失败原因</td>
 </tr>
 <tr>
 <td>输出</td>
 <td>状态</td>
-<td>开、关、能不能操作</td>
+<td>开机、关机，以及当前能不能操作</td>
 </tr>
 <tr>
 <td>对云机</td>
 <td>adb</td>
-<td>正式 <code>127.0.0.1:5555</code>；临时 Mac 转发口</td>
+<td>正式环境用 <code>127.0.0.1:5555</code>，临时环境用 Mac 上的转发端口</td>
 </tr>
 </tbody>
 </table>
-<p>对话来回只有这五种。字段名未定，见附录 B1。</p>
-<h4>3.2.4 数据结构</h4>
-<p>未建。不编一套假的表。</p>
-<h4>3.2.5 调用关系</h4>
-<p>客户端把交代送到控制程序的接口。控制程序只调云机 adb，不把 scrcpy 或屏幕流转到客户端。</p>
-<p><strong>通道（2026-10-22 定并已实现）</strong>：</p>
+<p>客户端与控制程序之间的往来只有这五种。字段名尚未确定，见附录 B1。</p>
+<h4>2.2.4 数据结构</h4>
+<p>尚未建立。不编造一套虚假的表结构。</p>
+<h4>2.2.5 调用关系</h4>
+<p>客户端把交代发送到控制程序的接口。控制程序只调用云机的 adb，不会把 scrcpy 或屏幕流转发给客户端。</p>
+<p><strong>通道（2026-10-22 确定并已实现）</strong>：</p>
 <pre><code>POST /turn   {text: &quot;交代&quot;}
   ← 事件流：progress / needs_human / result / status
 </code></pre>
-<p>壳只认这四种事件，不认云机地址、不认 adb。控制程序跑在哪台机、云机是容器还是租用实例，壳都不需要知道。接口层包住 Mobilerun 的调用与结果。</p>
-<p>实现：<code>serve.py</code>（同仓库，零依赖，默认 <code>127.0.0.1:8777</code>）。壳页 <code>GET /</code>（<code>shell.html</code>）；步骤回放 <code>GET /replay?id=&lt;轨迹&gt;</code>（Mobilerun <code>--save-trajectory step</code> 出嘅每步截图 + 思考 + 动作）；截图 <code>GET /traj/&lt;id&gt;/screenshots/&lt;f&gt;</code>。<code>GET /health</code>、<code>GET /status</code>、<code>POST /turn</code>（SSE）。<strong>已实测两条路径</strong>：① 成功 —— <code>"打开设置，睇下 Android 版本"</code> 回 <code>status → progress×N → result{success:true}</code>，答案 Android 13；② 失败 —— <code>"打开图库，睇下有几多张相"</code> 图库本身无相，agent 8 步用尽，回 <code>needs_human{reason:"Reached max step count of 8 steps"} → result{success:false}</code>。云机未连时回 <code>status{state:"not_ready"} → needs_human → result{success:false}</code>，唔会挂住。</p>
-<h4>3.2.6 算法</h4>
-<p>第一版只要求做透一个场景（见附录 B3）。Mobilerun 直跑用 <code>mobilerun run "..."</code>；要看图加 <code>--vision</code>，要多步规划加 <code>--reasoning</code>。</p>
-<p>⚠️ 已踩：<code>--provider OpenAI</code> 会按官方模型白名单校验，自定义模型名（Qbridge 的 <code>workbuddy/deepseek-v4.1-flash</code>）直接被拒（<code>Unknown model</code>）。要走本地 OpenAI 兼容端点，用 <code>--provider DeepSeek --api_base http://127.0.0.1:7863/v1</code>。</p>
-<h4>3.2.7 处理顺序</h4>
+<p>壳只识别这四种事件，既不认云机地址，也不认 adb。控制程序运行在哪台机器上、云机是容器还是租用实例，壳都不需要知道。接口层负责封装 Mobilerun 的调用和结果。</p>
+<p>实现位于 <code>serve.py</code>（同仓库，零依赖，默认监听 <code>127.0.0.1:8777</code>）。壳页通过 <code>GET /</code> 获取（文件为 <code>shell.html</code>）；步骤回放通过 <code>GET /replay?id=&lt;轨迹&gt;</code> 获取（内容是 Mobilerun 用 <code>--save-trajectory step</code> 保存下来的每步截图、思考过程和动作）；截图通过 <code>GET /traj/&lt;id&gt;/screenshots/&lt;f&gt;</code> 获取。另外还有 <code>GET /health</code>、<code>GET /status</code> 和 <code>POST /turn</code>（SSE）。<strong>已经实测两条路径</strong>：① 成功 —— <code>"打开设置，睇下 Android 版本"</code> 依次返回 <code>status → progress×N → result{success:true}</code>，答案是 Android 13；② 失败 —— <code>"打开图库，睇下有几多张相"</code> 时图库本身没有照片，agent 把 8 步用尽，返回 <code>needs_human{reason:"Reached max step count of 8 steps"} → result{success:false}</code>。云机没有连接时，会依次返回 <code>status{state:"not_ready"} → needs_human → result{success:false}</code>，不会一直卡住。</p>
+<h4>2.2.6 算法</h4>
+<p>第一版只要求把一个场景做透（见附录 B3）。直接运行 Mobilerun 用 <code>mobilerun run "..."</code>；需要看图就加 <code>--vision</code>，需要多步规划就加 <code>--reasoning</code>。</p>
+<p>⚠️ 已经踩过的坑：<code>--provider OpenAI</code> 会按官方模型白名单做校验，自定义的模型名（Qbridge 的 <code>workbuddy/deepseek-v4.1-flash</code>）会被直接拒绝，报 <code>Unknown model</code>。如果要走本地的 OpenAI 兼容端点，需要改用 <code>--provider DeepSeek --api_base http://127.0.0.1:7863/v1</code>。</p>
+<h4>2.2.7 处理顺序</h4>
 <ol>
-<li>收到交代。</li>
-<li>确认云机可操作。不可操作则返回状态和失败原因，停止。</li>
-<li>若交代是安装或打开，先经 adb 做完，返回结果。</li>
-<li>若要操作界面，交 Mobilerun 执行，逐步回报进度。</li>
-<li>做不下去，发要人，人在云机侧接手。</li>
-<li>收到关机交代，关掉这部，返回状态。</li>
+<li>收到用户交代。</li>
+<li>确认云机可以操作。如果不能操作，就返回当前状态和失败原因，然后结束。</li>
+<li>如果交代的是安装或者打开应用，先通过 adb 做完，再返回结果。</li>
+<li>如果需要操作界面，就交给 Mobilerun 执行，并逐步回报进度。</li>
+<li>如果做不下去，就发出「要人」信号，由人在云机一侧接手。</li>
+<li>如果收到关机交代，就关掉这一部云机，并返回状态。</li>
 </ol>
-<h3>3.3 客户端</h3>
-<h4>3.3.1 程序特征</h4>
-<p>薄壳，未建。只做三件事：收一句交代、显示进度、显示结果（含要人）。不含 agent、不带电脑容器、不依赖 docker。</p>
-<p>2026-10-22 原拟用现成 Rakazo 桌面，<strong>已完整删除</strong>（容器、镜像、数据卷、源码目录一并清掉）。理由：Rakazo 自带 agent 与「电脑」容器，与「客户端只系壳」冲突；两层 agent 串埋会 token 双花、步数放大、出错分不清哪层。同日亦否决 dsh 桌面（同属自带 agent 的 harness，不是壳）。</p>
-<p>候选形态（择一，未定，见附录 B7）：① 先用 Telegram / Hermes 桌面顶，零开发；② 自写薄壳（Tauri 或 Electron），可打包三端。</p>
-<h4>3.3.2 功能</h4>
-<p>给人一个对话入口。发出交代。显示进度、要人、结果、状态。不在客户端打开云机画面，不在客户端点云机。</p>
-<h4>3.3.3 输入 / 输出</h4>
+<h3>2.3 客户端</h3>
+<h4>2.3.1 程序特征</h4>
+<p>客户端目前规划为一个「薄壳」，尚未开始建设。它只做三件事：接收用户发来的一句交代，显示进度，显示结果（其中包括需要人来处理的情况）。它内部不包含 agent，不携带「电脑」容器，也不依赖 docker。</p>
+<p>2026-10-22，原本打算直接采用现成的 Rakazo 桌面端，该方案<strong>已经完整删除</strong>，容器、镜像、数据卷和源码目录一并清理干净。理由是：Rakazo 自带 agent 和「电脑」容器，这与「客户端只是一个壳」的定位冲突。两层 agent 叠加在一起，会造成 token 重复消耗、步数被放大，而且出错时分不清是哪一层出的问题。同一天也否决了 dsh 桌面端，因为它同样属于自带 agent 的 harness（一套自带 agent 的运行框架），而不是壳。</p>
+<p>候选形态有两种，目前尚未决定，见附录 B7：① 先用 Telegram 或 Hermes 桌面端顶上，零开发成本；② 自己写一个薄壳（Tauri 或 Electron），可以打包三个平台。</p>
+<h4>2.3.2 功能</h4>
+<p>客户端给用户提供一个对话入口。用户在这里发出交代，客户端显示进度、需要人处理的事项、结果和状态。客户端不打开云手机画面，也不在客户端里点击云手机。</p>
+<h4>2.3.3 输入 / 输出</h4>
 <table>
 <thead>
 <tr>
@@ -860,69 +819,69 @@ a:hover{border-bottom-color:var(--acc)}
 <tbody>
 <tr>
 <td>输入</td>
-<td>人输入的交代</td>
+<td>用户输入的交代</td>
 </tr>
 <tr>
 <td>输出</td>
-<td>发给控制程序的交代</td>
+<td>转发给控制程序的交代</td>
 </tr>
 <tr>
 <td>输入</td>
-<td>控制程序返回的进度、要人、结果、状态</td>
+<td>控制程序返回的进度、需要人处理的事项、结果和状态</td>
 </tr>
 <tr>
 <td>输出</td>
-<td>显示给人</td>
+<td>显示给用户</td>
 </tr>
 </tbody>
 </table>
-<p>壳只调 <code>POST /turn</code> 与事件流。壳不连 adb，不认云机是怎么来的。</p>
-<h4>3.3.4 数据结构</h4>
-<p>未定。壳只保留对话显示，不存云机状态，不存 adb 地址。</p>
-<h4>3.3.5 调用关系</h4>
-<p>人调用壳。壳只调用控制程序接口。壳不调用云机 adb，也不调用 <code>127.0.0.1:5555</code>（那个地址不在壳这一侧）。</p>
-<h4>3.3.6 算法</h4>
+<p>壳只调用 <code>POST /turn</code> 和事件流这两个接口。它不连接 adb，也不关心云手机是从哪里来的。</p>
+<h4>2.3.4 数据结构</h4>
+<p>尚未确定。壳只保留对话的显示内容，既不保存云手机状态，也不保存 adb 地址。</p>
+<h4>2.3.5 调用关系</h4>
+<p>用户调用壳，壳只调用控制程序的接口。壳既不会直接调用云手机的 adb，也不会访问 <code>127.0.0.1:5555</code>，因为这个地址不在壳这一侧。</p>
+<h4>2.3.6 算法</h4>
 <p>无。</p>
-<h4>3.3.7 实况窗触控</h4>
-<p>点击 = 点云机，拖动 = 滑动，另有三键。接口（<code>POST</code> JSON，做完即刻抓一帧令壳见到反应）：<code>/device/tap {x,y}</code>、<code>/device/swipe {x1,y1,x2,y2,ms}</code>、<code>/device/key {key}</code>（back/home/appswitch/menu/enter/del/power/wakeup/sleep）、<code>/device/home</code>。</p>
-<p>坐标换算（画面 <code>object-fit:contain</code>，唔可以直接用元素宽高）：</p>
+<h4>2.3.7 实况窗触控</h4>
+<p>在实况窗里，点击就是对云手机执行点按，拖动就是执行滑动，另外还提供三个系统按键。接口采用 <code>POST</code> JSON，每次操作完成之后立即抓一帧，让壳马上看到反应：<code>/device/tap {x,y}</code>、<code>/device/swipe {x1,y1,x2,y2,ms}</code>、<code>/device/key {key}</code>（back/home/appswitch/menu/enter/del/power/wakeup/sleep）、<code>/device/home</code>。</p>
+<p>坐标换算要注意画面使用了 <code>object-fit:contain</code>，因此不能直接用元素的宽高来计算：</p>
 <pre><code>k  = min(boxW/720, boxH/1280)
 ox = imgLeft + (boxW - 720k)/2 ,  oy = imgTop + (boxH - 1280k)/2
 x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 </code></pre>
-<p>判定：位移 &lt;9 px 且 &lt;600 ms → tap；否则 swipe（ms 取按住时长，夹 80–900）。离线时唔送输入。实测：<code>input tap</code> 本身 30–44 ms、<code>swipe</code> 0.27–0.31 s、接口往返（含抓帧）tap 134–402 ms、swipe 441–452 ms。</p>
-<h4>3.3.8 实况直播（H.264）</h4>
-<p>链路：<code>screenrecord --output-format=h264 -</code> → <code>adb exec-out</code> → serve 切 NAL 广播（<code>[4B len][1B kind][4B ts][payload]</code>）→ 浏览器 <code>VideoDecoder</code> 硬解 → canvas；触控仍走 <code>/device/*</code>。</p>
+<p>判定规则是：位移小于 9 px 并且按住时间小于 600 ms 时判定为 tap，否则判定为 swipe（ms 取按住时长，并夹在 80–900 之间）。云手机离线时不发送输入。实测数据：<code>input tap</code> 本身耗时 30–44 ms，<code>swipe</code> 耗时 0.27–0.31 s；接口往返（包含抓帧）时，tap 为 134–402 ms，swipe 为 441–452 ms。</p>
+<h4>2.3.8 实况直播（H.264）</h4>
+<p>链路是这样的：<code>screenrecord --output-format=h264 -</code> → <code>adb exec-out</code> → 由 serve 切分 NAL 并广播（<code>[4B len][1B kind][4B ts][payload]</code>）→ 浏览器端的 <code>VideoDecoder</code> 硬解 → 绘制到 canvas；触控仍然走 <code>/device/*</code>。</p>
 <table>
 <thead>
 <tr>
-<th>踩过嘅问题</th>
+<th>踩过的问题</th>
 <th>做法</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>设备只允许一路 <code>screenrecord</code></td>
-<td>服务端单路编码 + 队列广播；空闲 8 s 收进程</td>
+<td>设备只允许同时跑一路 <code>screenrecord</code></td>
+<td>服务端只做单路编码，再通过队列广播；空闲 8 s 后结束进程</td>
 </tr>
 <tr>
-<td>中途接入冇关键帧（<code>A key frame is required</code>）</td>
-<td>新客户端 / <code>?fresh=1</code> 时重开编码进程，保证由 SPS+PPS+IDR 开始；前端遇错自动 fresh 重连</td>
+<td>中途接入时没有关键帧（<code>A key frame is required</code>）</td>
+<td>新客户端接入或带 <code>?fresh=1</code> 时重新打开编码进程，保证从 SPS+PPS+IDR 开始；前端遇到错误会自动 fresh 重连</td>
 </tr>
 <tr>
-<td>Chrome 要 AVCC 唔要 Annex-B</td>
-<td>自拼 avcC（profile/compat/level + SPS/PPS），<code>VideoDecoder.configure({description})</code>，每帧 4 字节长度前缀</td>
+<td>Chrome 需要 AVCC 格式，不接受 Annex-B 格式</td>
+<td>自己拼 avcC（profile/compat/level 加 SPS/PPS），调用 <code>VideoDecoder.configure({description})</code>，每帧前加 4 字节长度前缀</td>
 </tr>
 <tr>
-<td>静态画面冇帧（新页空白）</td>
-<td>用 <code>/screen.png</code> 画底板，静止 &gt;2.5 s 补一张保鲜</td>
+<td>静态画面没有帧（新页面空白）</td>
+<td>先用 <code>/screen.png</code> 画出底板，静止超过 2.5 s 时补抓一张保持画面新鲜</td>
 </tr>
 </tbody>
 </table>
-<p>实测（720×1280 / 6 Mbps）：刷新率 0.9–9 fps（截图轮询）→ <strong>21.5 fps</strong>（动画面）；发输入到画面见变化 340–450 ms → <strong>277–294 ms</strong>；拖拽由跳帧变连续；码流约 2 Mbps（动画面）、静止 0。限制：<code>screenrecord</code> 单次 180 s 到期自动重开。</p>
-<h3>3.4 执行层设计（L0 / L1a / L1b / L2）</h3>
-<h4>3.4.1 为什么要分层</h4>
-<p>现役只有一个执行通道：截图给模型、模型给坐标。实测（天翼云手机 <code>127.0.0.1:10532</code>，Android 13；该载体已停用，数据留作对照）：</p>
+<p>实测（720×1280 / 6 Mbps）：刷新率从 0.9–9 fps（截图轮询）提升到 <strong>21.5 fps</strong>（有动画时）；从发出输入到画面出现变化，从 340–450 ms 降到 <strong>277–294 ms</strong>；拖拽由跳帧变成连续；码流在有动画时约 2 Mbps，静止时为 0。限制是 <code>screenrecord</code> 单次 180 s 到期后会自动重开。</p>
+<h3>2.4 执行层设计（L0 / L1a / L1b / L2）</h3>
+<h4>2.4.1 为什么要分层</h4>
+<p>现役只有一个执行通道：先截图给模型，模型再返回坐标。实测环境是天翼云手机 <code>127.0.0.1:10532</code>，Android 13；该载体已经停用，数据留作对照：</p>
 <table>
 <thead>
 <tr>
@@ -941,7 +900,7 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 </tr>
 <tr>
 <td>多步任务</td>
-<td>「记录 20 个俯卧撑入印象笔记」跑满 20 步仍失败（<code>Reached max step count of 20</code>）</td>
+<td>让「记录 20 个俯卧撑入印象笔记」跑满 20 步仍然失败（<code>Reached max step count of 20</code>）</td>
 </tr>
 <tr>
 <td>70 条轨迹工具失败率</td>
@@ -949,9 +908,9 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 </tr>
 </tbody>
 </table>
-<p>原因不是模型笨，是<strong>每一步都在重新猜界面</strong>，步骤越多误差与耗时累加。故拆成四层，按「能不能确定」从上往下用，把视觉通道的负责步数压到 1–2 步。</p>
-<h4>3.4.2 L0 确定性命令通道</h4>
-<p>不给模型、不看屏，直接把交代翻成 adb 命令，做完只做一次结果校验。</p>
+<p>出现这种情况，原因不是模型笨，而是每一步都在重新猜界面，步骤越多，误差和耗时就累加得越厉害。因此执行层拆成四层，按「能不能确定」从上往下使用，把视觉通道负责的步数压到 1–2 步。</p>
+<h4>2.4.2 L0 确定性命令通道</h4>
+<p>L0 不把画面交给模型，也不看屏幕，而是直接把交代翻译成 adb 命令，执行完只做一次结果校验。</p>
 <table>
 <thead>
 <tr>
@@ -970,16 +929,16 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 </tr>
 <tr>
 <td>判定成功</td>
-<td>命令返回码 + <code>dumpsys activity activities</code> 的 <code>topResumedActivity</code> 等于目标 Activity</td>
+<td>命令返回码加上 <code>dumpsys activity activities</code> 里的 <code>topResumedActivity</code> 等于目标 Activity</td>
 </tr>
 <tr>
 <td>限制</td>
-<td>① 任何「要理解界面」的操作都做不了 ② <strong>中文输入不可用</strong>：<code>input text "今日做咗20个俯卧撑"</code> 直接 <code>java.lang.NullPointerException: Attempt to get length of null array</code>（只有 ASCII 能打）</td>
+<td>① 任何「需要理解界面」的操作都做不了 ② <strong>中文输入不可用</strong>：<code>input text "今日做咗20个俯卧撑"</code> 会直接报 <code>java.lang.NullPointerException: Attempt to get length of null array</code>（只能打 ASCII；要输入中文需改用 ADBKeyBoard 广播方式，见附录 C.3）</td>
 </tr>
 </tbody>
 </table>
-<h4>3.4.3 L1a 无障碍树通道</h4>
-<p>读系统无障碍树拿语义节点（text / resource-id / bounds / role），按节点动作，不需要猜坐标。</p>
+<h4>2.4.3 L1a 无障碍树通道</h4>
+<p>L1a 读取系统的无障碍树，拿到带语义的节点（text / resource-id / bounds / role），然后按节点执行动作，不需要猜坐标。</p>
 <table>
 <thead>
 <tr>
@@ -990,32 +949,32 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 <tbody>
 <tr>
 <td>实现</td>
-<td>常驻 instrumentation helper（<code>agent-device</code> CLI v0.21.31 实测可用；亦可自建）</td>
+<td>使用常驻的 instrumentation helper（<code>agent-device</code> CLI v0.21.31 实测可用，也可以自建）</td>
 </tr>
 <tr>
 <td>实测</td>
-<td>裸 <code>uiautomator dump</code> <strong>2.25–2.39 s</strong>（每次都起 instrumentation）；常驻 helper 快照 <strong>1.12–1.14 s</strong>，内容无变时 0.4 s 直接返回「unchanged」</td>
+<td>裸跑 <code>uiautomator dump</code> 要 <strong>2.25–2.39 s</strong>（每次都要启动 instrumentation）；常驻 helper 快照 <strong>1.12–1.14 s</strong>，内容没有变化时 0.4 s 直接返回「unchanged」</td>
 </tr>
 <tr>
 <td>中文输入</td>
-<td>需机内 IME：<code>agent-device open --test-ime</code> + <code>fill</code>（实测中文标题写入成功）</td>
+<td>需要机内 IME：<code>agent-device open --test-ime</code> 加 <code>fill</code>（实测中文标题写入成功）</td>
 </tr>
 <tr>
 <td>限制一</td>
-<td><strong>WebView 内容会延迟出现</strong>：无障碍树由 Chromium 侧在 a11y 服务 attach 后惰性构建。实测印象笔记模板页 uiautomator 能读到 494 节点（其中 257 个 TextView 在 WebView 内）—— 不是读不到，是<strong>首次访问常为空或滞后</strong>，需重试一次</td>
+<td><strong>WebView 内容会延迟出现</strong>：无障碍树由 Chromium 侧在 a11y 服务 attach 之后惰性构建。实测印象笔记模板页用 uiautomator 能读到 494 个节点（其中 257 个 TextView 位于 WebView 内）——所以不是读不到，而是<strong>首次访问时经常为空或滞后</strong>，需要重试一次</td>
 </tr>
 <tr>
 <td>限制二</td>
-<td><strong>富文本编辑器读回不可靠</strong>：<code>en-note</code> 的 contenteditable 节点只报「可编辑、无文本值」，填充后读回验证失败（实测 <code>Android fill verification failed</code>）</td>
+<td><strong>富文本编辑器读回不可靠</strong>：<code>en-note</code> 的 contenteditable 节点只报告「可编辑、无文本值」，填充之后读回验证会失败（实测 <code>Android fill verification failed</code>）</td>
 </tr>
 <tr>
 <td>限制三</td>
-<td>失败动作会令整帧 <code>@ref</code> 失效（实测 <code>Ref @e4 belongs to an expired ref frame</code>），必须重新快照，每次失败多 1.1 s</td>
+<td>失败的动作会让整帧 <code>@ref</code> 失效（实测 <code>Ref @e4 belongs to an expired ref frame</code>），必须重新快照，因此每次失败都要多花 1.1 s</td>
 </tr>
 </tbody>
 </table>
-<h4>3.4.4 L1b WebView CDP 通道（有条件）</h4>
-<p>Android WebView 支持 Chrome DevTools 协议，但<strong>只有宿主 App 调用过 <code>WebView.setWebContentsDebuggingEnabled(true)</code> 才会开 abstract socket</strong>。</p>
+<h4>2.4.4 L1b WebView CDP 通道（有条件）</h4>
+<p>Android WebView 支持 Chrome DevTools 协议，但是<strong>只有宿主 App 调用过 <code>WebView.setWebContentsDebuggingEnabled(true)</code>，才会打开对应的 abstract socket</strong>。</p>
 <table>
 <thead>
 <tr>
@@ -1034,21 +993,21 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 </tr>
 <tr>
 <td>速度</td>
-<td>与 PC 同级：PC 实测读全页 DOM 22 节点 <strong>2.5 ms</strong>；同机对比 uiautomator 2300 ms，差三个数量级</td>
+<td>与 PC 同级：PC 实测读取全页 DOM 的 22 个节点耗时 <strong>2.5 ms</strong>；同机用 uiautomator 对比是 2300 ms，两者相差三个数量级</td>
 </tr>
 <tr>
 <td>实测限制</td>
-<td>第三方 App 默认唔开会话：印象笔记运行中 <code>/proc/net/unix</code> 只见 <code>WebViewZygoteInit</code>，<strong>无 <code>*_devtools_remote</code> socket</strong> → 外人接唔到</td>
+<td>第三方 App 默认不打开调试会话：印象笔记运行时 <code>/proc/net/unix</code> 里只能看到 <code>WebViewZygoteInit</code>，<strong>没有 <code>*_devtools_remote</code> socket</strong>，所以外部接不进去</td>
 </tr>
 <tr>
 <td>可用范围</td>
-<td>我方可控的 WebView（Portal APK、自家壳、自研 App）一定可用；第三方 App 待其自身开启；机内 agent（R2）可在运行时打开</td>
+<td>我方可控的 WebView（Portal APK、自家壳、自研 App）一定可用；第三方 App 要等它自己开启；机内 agent（R2）可以在运行时打开</td>
 </tr>
 </tbody>
 </table>
-<h4>3.4.5 L2 视觉通道</h4>
-<p>Mobilerun：截图 + 多模态模型找控件，输出 <code>click{index}</code> / <code>type</code> / <code>swipe</code> 等。<strong>只做兜底</strong>：L0/L1 都不认识界面时才用，步数上限 20。</p>
-<h4>3.4.6 路由与降级规则</h4>
+<h4>2.4.5 L2 视觉通道</h4>
+<p>Mobilerun 的做法是截图加多模态模型找控件，输出 <code>click{index}</code> / <code>type</code> / <code>swipe</code> 等动作。它<strong>只做兜底</strong>：L0 和 L1 都不认识界面时才使用，步数上限是 20。</p>
+<h4>2.4.6 路由与降级规则</h4>
 <table>
 <thead>
 <tr>
@@ -1066,7 +1025,7 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 <tr>
 <td>原生控件界面（设置、系统 App、多数工具类）</td>
 <td>L1a</td>
-<td>快照找不到目标节点，或两轮未达成 → L1b（若为 WebView）或 L2</td>
+<td>快照找不到目标节点，或两轮仍未达成 → L1b（若为 WebView）或 L2</td>
 </tr>
 <tr>
 <td>WebView 且我方可控</td>
@@ -1085,8 +1044,8 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 </tr>
 </tbody>
 </table>
-<p>同一单任务每层只试一次，最多一轮降级；L2 仍失败则出「要人」，附最后一张截图与已执行动作列表。</p>
-<h4>3.4.7 预算与失败处理</h4>
+<p>同一个任务里，每层只试一次，最多降级一轮；到 L2 仍然失败，就发出「要人」信号，并附上最后一张截图和已经执行过的动作列表。</p>
+<h4>2.4.7 预算与失败处理</h4>
 <table>
 <thead>
 <tr>
@@ -1101,15 +1060,15 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 </tr>
 <tr>
 <td>L1 单次快照超时</td>
-<td>8 s；同一界面连续两次快照无变化视为卡住</td>
+<td>8 s；同一界面连续两次快照没有变化，视为卡住</td>
 </tr>
 <tr>
 <td>L2 步数上限</td>
-<td>20（沿用现设置）</td>
+<td>20（沿用现有设置）</td>
 </tr>
 <tr>
 <td>整单预算</td>
-<td>L0 + L1 合计 ≤ 30 s，超出即降 L2</td>
+<td>L0 与 L1 合计不超过 30 s，超出就降级到 L2</td>
 </tr>
 <tr>
 <td>失败归因</td>
@@ -1117,10 +1076,10 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 </tr>
 </tbody>
 </table>
-<h4>3.4.8 与运维 PRD 的关系</h4>
-<p><code>~/目标/积累/ctyun/cloudphone-ops-agent-prd.md</code> 是<strong>云手机运维/客服</strong>场景（投诉 → 分配云机 → AI 排查 → 报告），本设计只复用其 §4 的 ADB 能力矩阵作为 L0 目录，不沿用其产品形态。</p>
-<h4>3.4.9 落地实现（<code>layers.py</code>）</h4>
-<p><code>serve.py</code> 的 <code>run_agent()</code> 第一步调 <code>layers.route(text)</code>；命中就唔开 Mobilerun。每层自己判「接唔接呢句」，接唔到返 <code>None</code> 交下一层。</p>
+<h4>2.4.8 与运维 PRD 的关系</h4>
+<p><code>~/目标/积累/ctyun/cloudphone-ops-agent-prd.md</code> 描述的是<strong>云手机运维与客服</strong>场景（投诉 → 分配云机 → AI 排查 → 报告）。本设计只复用其中 §3 的 ADB 能力矩阵，作为 L0 的能力目录，不沿用它的产品形态。</p>
+<h4>2.4.9 落地实现（<code>layers.py</code>）</h4>
+<p><code>serve.py</code> 的 <code>run_agent()</code> 第一步调用 <code>layers.route(text)</code>；只要命中，就不再启动 Mobilerun。每一层自己判断「接不接这句话」，接不了就返回 <code>None</code> 交给下一层。</p>
 <table>
 <thead>
 <tr>
@@ -1135,29 +1094,29 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 <td>L0</td>
 <td>正则命中 20 类能力（打开 app / 回桌面 / 关 app / 清数据 / 卸载 / 音量 / 亮度 / Wi-Fi / 蓝牙 / 飞行模式 / 截图 / 装包 / 列包 / 属性 / 开网址 / 点坐标 / 滑动 / ASCII 输入 / 查前台 / 按键）</td>
 <td><code>am start -W -n</code>、<code>input keyevent</code>、<code>settings put</code>、<code>svc wifi</code>…</td>
-<td><code>topResumedActivity</code> 变到目标包、<code>settings get</code> 读回一致</td>
+<td><code>topResumedActivity</code> 变为目标包、<code>settings get</code> 读回的值一致</td>
 </tr>
 <tr>
 <td>L1a</td>
 <td>动词（点击/点开/按/选/打开/进入）+ 目标词</td>
 <td><code>agent-device snapshot -i</code> → label/identifier 精确→包含→去空格模糊 → <code>input tap</code> 控件中心</td>
-<td>前台包变 <strong>或</strong> 快照 hash 变</td>
+<td>前台包发生变化 <strong>或</strong> 快照 hash 发生变化</td>
 </tr>
 <tr>
 <td>L1b</td>
 <td>前台 App 有 <code>@webview_devtools_remote_*</code> socket</td>
 <td><code>adb forward</code> → <code>/json</code> → WebSocket <code>Runtime.evaluate</code> 找文字元素 <code>.click()</code></td>
-<td>JS 返 <code>ok:true</code></td>
+<td>JS 返回 <code>ok:true</code></td>
 </tr>
 <tr>
 <td>L2</td>
-<td>上三层全 miss（含 S 层派唔到）</td>
+<td>上三层全部未命中（包括 S 层派不下去）</td>
 <td><code>mobilerun run</code></td>
-<td>Mobilerun 自判</td>
+<td>由 Mobilerun 自行判定</td>
 </tr>
 </tbody>
 </table>
-<p><strong>L0 解析纪律（v0.36）</strong>：① 语气词 / 补语要食得落（<code>NOISE</code> 含 吧/啊/嘛；卸载正则含 <code>(?:掉|咗|了|甩)?</code>），否则「卸载掉X吧」抓唔出 app 名；② 别名表要够（缺词就靠包名 token 撞，撞唔到即 miss）；③ <strong>卸载系确定性动作</strong> —— 查唔到包名即刻报「包表冇 X；机上第三方有 N 个」并 <code>final</code>，唔准落 L2 点几十秒（指代词「这个/呢个/佢」才交 L1/L2）；卸完清 <code>installed()</code> 缓存。</p>
+<p><strong>L0 解析纪律（v0.36）</strong>：① 语气词和补语都要能容忍（<code>NOISE</code> 包含 吧/啊/嘛；卸载正则包含 <code>(?:掉|咗|了|甩)?</code>），否则「卸载掉X吧」抓不出 app 名；② 别名表要足够全（缺词就靠包名 token 去撞，撞不到就是未命中）；③ <strong>卸载是确定性动作</strong> —— 查不到包名就立即报告「包表没有 X；机上第三方有 N 个」并 <code>final</code>，不允许落到 L2 白白点几十秒（只有指代词，例如「这个」「呢个」「佢」，才交给 L1/L2）；卸载完成后要清理 <code>installed()</code> 缓存。</p>
 <p><strong>实测（redroid 13 / 720×1280）</strong></p>
 <table>
 <thead>
@@ -1175,12 +1134,12 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 </tr>
 <tr>
 <td>L0</td>
-<td>卸载（真卸）/ 报未装</td>
+<td>卸载（真实卸载）/ 报告未安装</td>
 <td>165 ms / 27 ms</td>
 </tr>
 <tr>
 <td>L0</td>
-<td>查有冇装（新增语序「X 装咗未」）</td>
+<td>查询是否安装（新增语序「X 装咗未」）</td>
 <td>39 ms</td>
 </tr>
 <tr>
@@ -1205,18 +1164,18 @@ x_dev = (clientX - ox)/k ,        y_dev = (clientY - oy)/k
 </tr>
 </tbody>
 </table>
-<p>L1a 两个现实约束：① a11y 树系<strong>设备语言</strong>（本机 en-US），中文靠内置 <code>I18N</code> 映射（网络和互联网→Network &amp; internet），映射唔到就 miss，唔硬猜；② 只命中 <code>visibleToUser</code> 且非系统栏嘅节点，滚动区未展开嘅项搵唔到。</p>
-<h4>3.4.10 事件契约（<code>/turn</code> SSE）</h4>
+<p>L1a 还有两个现实约束：① a11y 树用的是<strong>设备语言</strong>（本机是 en-US），中文要靠内置的 <code>I18N</code> 映射（网络和互联网 → Network &amp; internet），映射不到就是未命中，不做硬猜；② 只命中 <code>visibleToUser</code> 且不属于系统栏的节点，滚动区里尚未展开的条目找不到。</p>
+<h4>2.4.10 事件契约（<code>/turn</code> SSE）</h4>
 <pre><code class="language-json">event: layer
 data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和互联网」&quot;,&quot;cmds&quot;:[&quot;agent-device snapshot&quot;,&quot;input tap&quot;],
        &quot;ms&quot;:1391,&quot;ok&quot;:true,&quot;why&quot;:&quot;Network &amp; internet @(309,606)&quot;,&quot;kind&quot;:&quot;task&quot;}
 </code></pre>
 <ul>
-<li>未命中都会推一条 <code>{"layer":"L0","skip":true,"why":"能力表冇呢句"}</code>，壳据此划走该层。</li>
-<li>命中 L0/L1a/L1b 后，壳将 <strong>Mobilerun / Portal 标为「未用」</strong>（实际冇参与），L2 才会点亮。</li>
+<li>未命中时也会推一条 <code>{"layer":"L0","skip":true,"why":"能力表冇呢句"}</code>，壳据此把该层划掉。</li>
+<li>命中 L0/L1a/L1b 之后，壳会把 <strong>Mobilerun 和 Portal 标为「未用」</strong>（它们实际上没有参与），只有 L2 参与时才点亮。</li>
 </ul>
-<h4>3.4.11 壳侧呈现</h4>
-<p>执行层四格就系流程图里嘅常驻组件（唔另开标签带）。</p>
+<h4>2.4.11 壳侧呈现</h4>
+<p>执行层的四个格子就是流程图里的常驻组件，不另外开标签页。</p>
 <table>
 <thead>
 <tr>
@@ -1227,7 +1186,7 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <tbody>
 <tr>
 <td>命中该层</td>
-<td>绿框 + 副标题换实测耗时（<code>387 ms</code>）</td>
+<td>绿框，副标题换成实测耗时（<code>387 ms</code>）</td>
 </tr>
 <tr>
 <td>未命中</td>
@@ -1239,8 +1198,8 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tr>
 </tbody>
 </table>
-<p>走 L0/L1a/L1b 时 Portal 与 L2 自动标「未用」，只有 L2 点亮；远端 LLM 框对准 L2（前三层零模型）。实测四态：L0 387 ms、L1a 1680 ms、L1b 52 ms（<code>document.title</code> 变 <code>CLICKED</code>）、L2 兜底。</p>
-<h4>3.4.12 覆盖扩阔记录（为免「乜都落 L2」）</h4>
+<p>走 L0/L1a/L1b 时，Portal 与 L2 会自动标为「未用」，只有 L2 参与时才点亮；远端 LLM 框对准 L2（前三层完全不调用模型）。实测四种状态：L0 387 ms、L1a 1680 ms、L1b 52 ms（<code>document.title</code> 变为 <code>CLICKED</code>）、L2 兜底。</p>
+<h4>2.4.12 覆盖扩阔记录（为免「乜都落 L2」）</h4>
 <table>
 <thead>
 <tr>
@@ -1251,35 +1210,35 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </thead>
 <tbody>
 <tr>
-<td>打开 app 讲法</td>
+<td>打开 app 的说法</td>
 <td>只认 <code>打开/开/启动/开启/进入</code></td>
-<td>加 <code>去/用/睇/看/launch</code>，并吃 <code>个 / 一下</code></td>
+<td>增加 <code>去/用/睇/看/launch</code>，并且能兼容 <code>个 / 一下</code> 这类多余的字</td>
 </tr>
 <tr>
-<td>打开未装 app</td>
-<td>照 <code>am start</code> 等 5 s 超时</td>
-<td>先查包表，未安装即 <code>final</code> 回「确定结论」</td>
+<td>打开未安装的 app</td>
+<td>直接执行 <code>am start</code>，等 5 s 超时</td>
+<td>先查包表，未安装就 <code>final</code> 返回「确定结论」</td>
 </tr>
 <tr>
-<td>「查有冇装 X」</td>
-<td>冇呢个能力（落到 L2 翻设置）</td>
-<td>L0 直接 <code>pm list packages</code>，有/冇即答</td>
+<td>「查有没有装 X」</td>
+<td>没有这个能力（会落到 L2 去翻设置）</td>
+<td>L0 直接 <code>pm list packages</code>，有或没有立即回答</td>
 </tr>
 <tr>
 <td>L1a 动词</td>
 <td><code>点击/点/按/选/打开/进入</code></td>
-<td>加 <code>查找/找/搜/搜索/查看/睇/看/填/输入</code></td>
+<td>增加 <code>查找/找/搜/搜索/查看/睇/看/填/输入</code></td>
 </tr>
 <tr>
-<td>落 L2</td>
+<td>落到 L2</td>
 <td>只写「未命中」</td>
 <td>逐层写明原因</td>
 </tr>
 </tbody>
 </table>
-<p>另加第三方 app 别名表（印象笔记 / 微信 / 抖音 / 小红书 …）；表外又唔喺机上嘅名一律当唔识，唔乱猜。</p>
-<h4>3.4.13 触发条件公示（<code>GET /layers</code>）</h4>
-<p>「点解走呢层」唔靠估，接口直接列条件；<code>last_attempts</code> 回报上一单每层结果。</p>
+<p>另外增加了第三方 App 的别名表（印象笔记 / 微信 / 抖音 / 小红书 等）；表里没有、机器上又不存在的名字，一律当作不认识，不随意猜测。</p>
+<h4>2.4.13 触发条件公示（<code>GET /layers</code>）</h4>
+<p>「为什么走这一层」不靠猜，接口会直接列出条件；<code>last_attempts</code> 回报上一单每一层的结果。</p>
 <table>
 <thead>
 <tr>
@@ -1300,36 +1259,36 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <td>L1a</td>
 <td 点击_点开_点_按下_按_选择_选_打开_进入_查找_找_搜_搜索_查看_睇_看_填_输入_tap_click="点击,点开,点,按下,按,选择,选,打开,进入,查找,找,搜,搜索,查看,睇,看,填,输入,tap,click">① 正则「动词 + 1~12 字目标」② 动词 ∈</td>
 <td><code>agent-device snapshot -i</code> → 命中控件 → <code>input tap</code> 中心</td>
-<td>前台包变 或 快照 hash 变</td>
+<td>前台包发生变化 或 快照 hash 发生变化</td>
 </tr>
 <tr>
 <td>L1b</td>
-<td>① 同上「动词+目标」② <code>/proc/net/unix</code> 有 <strong>前台 App</strong> 嘅 <code>@webview_devtools_remote_&lt;pid&gt;</code></td>
+<td>① 同上「动词+目标」② <code>/proc/net/unix</code> 有 <strong>前台 App 的</strong> <code>@webview_devtools_remote_&lt;pid&gt;</code></td>
 <td><code>adb forward</code> → <code>/json</code> → WebSocket <code>Runtime.evaluate</code></td>
 <td>JS 返回 <code>ok:true</code></td>
 </tr>
 <tr>
 <td>L2</td>
-<td>上面全 miss</td>
+<td>上面三层全部未命中</td>
 <td><code>mobilerun run</code></td>
-<td>Mobilerun 自判</td>
+<td>由 Mobilerun 自行判定</td>
 </tr>
 </tbody>
 </table>
-<p>两条容易踩错嘅点，已修：</p>
+<p>有两处容易踩错的地方，已经修正：</p>
 <ol>
-<li><strong>L1b 拣错 socket</strong>：机身可能同时有几个 WebView 调试 socket（应用宝、WebView shell 各自一个）。原本取第一个，会点错 App。改为先 <code>pidof &lt;前台包&gt;</code>，只认尾巴 pid 对得上嘅 socket。</li>
-<li><strong>包名别名写错</strong>：印象笔记国行包名系 <code>com.yinxiang</code>（唔系 <code>com.evernote</code>），应用宝系 <code>com.tencent.android.qqdownloader</code>。别名错会令「有无装 X」误答「未安装」——所以搵唔到别名时改为列出机上第三方 app，唔好一口咬定冇装。</li>
+<li><strong>L1b 选错 socket</strong>：手机里可能同时存在几个 WebView 调试 socket（应用宝、WebView shell 各有一个）。原本取第一个，会点到错误的 App。现在改为先执行 <code>pidof &lt;前台包&gt;</code>，只认结尾 pid 对得上的那一个 socket。</li>
+<li><strong>包名别名写错</strong>：印象笔记国行版包名是 <code>com.yinxiang</code>（不是 <code>com.evernote</code>），应用宝是 <code>com.tencent.android.qqdownloader</code>。别名写错会让「有没有装 X」误答成「未安装」，所以找不到别名时改为列出机器上的第三方 App，不要一口咬定没有安装。</li>
 </ol>
-<p>另加「去<app>做X」前缀：先开 App，再把剩余意图跑第二轮（例如「去应用宝下载快手」= 开应用宝 + 再判「下载快手」）。</p>
-<h4>3.4.14 命中强调与用量统计</h4>
+<p>另外增加了「去<app>做X」前缀的处理：先打开 App，再把剩下的意图跑第二轮（例如「去应用宝下载快手」等于先打开应用宝，再判断「下载快手」）。</p>
+<h4>2.4.14 命中强调与用量统计</h4>
 <ul>
-<li><strong>强调</strong>：命中层用 Web Animations API 闪内嵌 2px 实黄（<code>rgba(251,191,36,.45) → 1 → .45</code>，1.1 s ×2），闪完停绿框 + 毫秒数。坑：<code>paint()</code> 会抹掉 className，故动画挂元素本身，另用 <code>PULSED</code> 表保证一单每层只闪一次（<code>layerReset()</code> 清表）。</li>
-<li><strong>查询类先答结论（v0.39）</strong>：问「有无 / 有冇 / 装咗未」一律由包表答，<code>result.message</code> <strong>开头就系结论</strong>——<code>有：com.tencent.mobileqq</code> / <code>冇：com.tencent.mm</code>，后面才带层与耗时，<code>answer=true</code> 令日志行标签写「答案」而唔系「完成」。实体先剥尾缀（<code>_clean_app_name()</code>：<code>QQ这个应用</code> → <code>QQ</code>）。句子带 <code>去设置</code> 都照答（老板定调：查询意图要嘅系有定无）；「有无兴趣」这类唔似 app 又 resolve 唔到嘅唔当查询。</li>
-<li><strong>统计</strong>：服务端 <code>LAYER_STATS</code> 每单短路到一层 +1，累计写 <code>~/.qphone/layer-stats.json</code>（重启唔清零），<code>/state</code>、<code>/history</code>、<code>result</code> 都带 <code>layer_stats</code> + <code>layer_total</code>；壳喺状态条下面画「执行层使用率」——堆叠条（L0 蓝 / L1a 绿 / L1b 紫 / L2 黄）+ 四层「单数 · 百分比」，开页即画，唔使等跑完单。</li>
+<li><strong>强调</strong>：命中某一层时，用 Web Animations API 把该层内嵌的 2px 实黄边框闪两下（<code>rgba(251,191,36,.45) → 1 → .45</code>，1.1 s ×2），闪完停在绿框加毫秒数上。这里有一个坑：<code>paint()</code> 会抹掉 className，所以动画挂在元素本身，另外用 <code>PULSED</code> 表保证一单里每层只闪一次（<code>layerReset()</code> 负责清表）。</li>
+<li><strong>查询类先答结论（v0.39）</strong>：凡是问「有没有 / 装了没有」这类问题，一律由包表回答，<code>result.message</code> <strong>开头就是结论</strong> —— 例如 <code>有：com.tencent.mobileqq</code> 或 <code>冇：com.tencent.mm</code>，结论之后才附带层与耗时；<code>answer=true</code> 会让日志行标签写成「答案」而不是「完成」。实体名要先剥掉尾缀（<code>_clean_app_name()</code>：<code>QQ这个应用</code> → <code>QQ</code>）。句子里带 <code>去设置</code> 也照样回答（老板定的原则：查询意图要的是有还是没有）；像「有没有兴趣」这种既不像 App、又无法解析的说法，不算查询。</li>
+<li><strong>统计</strong>：服务端用 <code>LAYER_STATS</code> 记录每单短路到哪一层，对应层加 1，累计结果写入 <code>~/.qphone/layer-stats.json</code>（服务重启也不清零）；<code>/state</code>、<code>/history</code> 和 <code>result</code> 都会带上 <code>layer_stats</code> 与 <code>layer_total</code>。壳在状态条下面绘制「执行层使用率」：一条堆叠条（L0 蓝 / L1a 绿 / L1b 紫 / L2 黄），加上四层各自的「单数 · 百分比」，页面打开就绘制，不必等任务跑完。</li>
 </ul>
-<h4>3.4.15 人工接管后续跑</h4>
-<p><strong>接管 = 「人肉步骤」委托，唔系任务移交</strong>（2026-10-27 定案）：用户只做 agent 物理/权限上做唔到嗰一步，做完 agent 必须继续成个任务，唔可以当完咗。</p>
+<h4>2.4.15 人工接管后续跑</h4>
+<p><strong>接管的性质是「人工步骤」委托，而不是任务移交</strong>（2026-10-27 定案）：用户只负责完成 agent 在物理条件或权限上做不到的那一步，做完之后 agent 必须继续执行整个任务，不能当成已经完成。</p>
 <table>
 <thead>
 <tr>
@@ -1342,16 +1301,16 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <tr>
 <td><strong>A 人肉步骤</strong></td>
 <td>登录/注册、验证码/CAPTCHA、付款/订阅、扫码</td>
-<td><code>classify_failure()</code> 命中关键词（或轨迹档尾 <code>FastAgentEndEvent</code>）→ 弹接管卡 → 用户做一步 → 续跑</td>
+<td><code>classify_failure()</code> 命中关键词（或轨迹文件末尾出现 <code>FastAgentEndEvent</code>）→ 弹出接管卡 → 用户做完一步 → 继续跑</td>
 </tr>
 <tr>
 <td><strong>B 技术失败</strong></td>
-<td>模型白谂 / malformed / 打转 / 步数尽 / 实际已完成但报失败</td>
-<td><strong>唔弹人</strong>，直接收工报原因（<code>needs_human</code> 带 <code>hand_scope:"none"</code>）</td>
+<td>模型空想 / malformed / 原地打转 / 步数用尽 / 实际已完成但报失败</td>
+<td><strong>不弹接管卡</strong>，直接结束并报告原因（<code>needs_human</code> 带 <code>hand_scope:"none"</code>）</td>
 </tr>
 </tbody>
 </table>
-<p><code>need_hand</code> 带 <code>hand</code>（请你做 X）+ <code>after</code>（之后我行 Y），壳显示「请你做：…。其余我行返」，另加备注输入框与「我已处理好，继续」。续跑走 <code>POST /turn/resume</code>，prompt 讲「用户<strong>只完成咗【X】</strong>，任务仲未完成…只有截图确认目标达成先可以 complete」。</p>
+<p><code>need_hand</code> 带 <code>hand</code>（请你做 X）和 <code>after</code>（之后我来做 Y），壳显示「请你做：…。其余我来做」，另外提供备注输入框和「我已处理好，继续」按钮。续跑走 <code>POST /turn/resume</code>，prompt 里写明「用户<strong>只完成了【X】</strong>，任务还没有完成……只有截图确认目标达成才可以 complete」。</p>
 <table>
 <thead>
 <tr>
@@ -1362,23 +1321,23 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <tbody>
 <tr>
 <td>步数</td>
-<td>累计唔重置（续跑用 <code>of - used</code>），壳靠 <code>STEP_BASE</code> 加返前面步数（Mobilerun 自己由 1 重数）</td>
+<td>累计不重置（续跑时用 <code>of - used</code>），壳靠 <code>STEP_BASE</code> 把前面的步数加回来（Mobilerun 自己从 1 重新计数）</td>
 </tr>
 <tr>
 <td>上限</td>
-<td><code>QPHONE_RESUME</code>（默认 3）次；用尽或步数尽即正常失败收工；B 类唔计次数</td>
+<td><code>QPHONE_RESUME</code>（默认 3）次；次数用尽或步数用尽就按正常失败收工；B 类不计次数</td>
 </tr>
 <tr>
 <td>卡片</td>
-<td>续跑用 <code>resume_started</code>，复用原任务卡，唔开新卡</td>
+<td>续跑用 <code>resume_started</code>，复用原来的任务卡，不新开卡片</td>
 </tr>
 <tr>
 <td>权限弹窗</td>
-<td>通知/存储/定位等 = B4，agent 自动应，唔等用户</td>
+<td>通知/存储/定位等属于 B4，由 agent 自动应答，不等待用户</td>
 </tr>
 </tbody>
 </table>
-<h4>3.4.16 步骤日志</h4>
+<h4>2.4.16 步骤日志</h4>
 <table>
 <thead>
 <tr>
@@ -1406,69 +1365,29 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <tr>
 <td>思考 / 动作</td>
 <td><code>activity</code>（只 L2）</td>
-<td>模型本步谂乜、Portal 做乜</td>
+<td>模型这一步在想什么、Portal 在做什么</td>
 </tr>
 <tr>
 <td>LOG / 异常</td>
 <td><code>progress</code> 其余行</td>
-<td>Mobilerun 原文（已滤 banner）</td>
+<td>Mobilerun 原文（已过滤 banner）</td>
 </tr>
 <tr>
 <td>完成 / 失败 / 接手 / 轨迹 / 重放 / 提示</td>
 <td><code>result</code> / <code>need_hand</code> / <code>trajectory</code> / 开页重放</td>
-<td>结果、要人、截图已存</td>
+<td>结果、需要人处理、截图已保存</td>
 </tr>
 </tbody>
 </table>
-<p>去噪：<code>✨🚀🤖👁📁🔧⚙🎯📦</code> banner、<code>&lt;...&gt;</code> / <code>FastAgent response</code> / <code>Malformed</code> / <code>Traceback</code> / <code>Attempt N</code> 唔入；<code>L0 · …</code> 摘要由 layer 行表达，唔重复；连续相同内容去重；<code>思考</code> 每步只写一次。</p>
-<p><strong>服务端副本（v0.35）</strong>：过程行另存 <code>HISTORY.&lt;单&gt;.log</code>（上限 400 行、连续相同去重），<code>/history</code> 带出；壳开页由 <code>slReplayLast()</code> 重放最后一单，首行标 <code>重放 … N 行</code>；旧数据冇 <code>log</code> 就出一行提示，唔扮有；本页已有实时行时唔覆盖。</p>
-<p>右栏结构：<code>云机实况</code> → <code>返回/主页/多任务</code> → <code>步骤日志</code>（占满剩余高度、内部滚动；标题右侧留时间 / 分辨率 / fps）。</p>
-<p><strong>坐标叠层（v0.39）</strong>：<code>云机实况</code> 标题栏有「坐标」开关，开了就在画面上叠 100px 网格（按实际 720×1280 标数值）+ 每次落点十字（青色，留 15 s、带 <code>x,y · 层</code> 标注）+ 滑动线（蓝色，起点到终点）；右下角读数框写最近落点与设备分辨率。落点来源三个：① 服务端 <code>layer</code> 事件的 <code>xy</code> / <code>xy2</code>（L0 点/滑、L1a 点控件都带）；② <code>cmds</code> 里的 <code>input tap x y</code> / <code>input swipe …</code>；③ L2 的 <code>点 (x, y)</code>；人手动点画面也会标，src 写「手动」。</p>
+<p>去噪规则：<code>✨🚀🤖👁📁🔧⚙🎯📦</code> banner、<code>&lt;...&gt;</code> / <code>FastAgent response</code> / <code>Malformed</code> / <code>Traceback</code> / <code>Attempt N</code> 都不写入；<code>L0 · …</code> 这类摘要已经由 layer 行表达，不再重复；连续相同的内容去重；<code>思考</code> 每步只写一次。</p>
+<p><strong>服务端副本（v0.35）</strong>：过程行另外存到 <code>HISTORY.&lt;单&gt;.log</code>（上限 400 行，连续相同的内容去重），由 <code>/history</code> 带出；壳打开页面时用 <code>slReplayLast()</code> 重放最后一单，首行标注 <code>重放 … N 行</code>；旧数据没有 <code>log</code> 就输出一行提示，不假装有数据；本页已经有实时行时不覆盖。</p>
+<p>右栏从上到下依次是：<code>云机实况</code> → <code>返回/主页/多任务</code> → <code>步骤日志</code>（占满剩余高度，内部滚动；标题右侧显示时间、分辨率和 fps）。</p>
+<p><strong>坐标叠层（v0.39）</strong>：<code>云机实况</code> 标题栏上有一个「坐标」开关。打开之后，画面上会叠加 100px 网格（按实际 720×1280 标注数值）、每次操作的落点十字（青色，保留 15 s，带 <code>x,y · 层</code> 标注）和滑动线（蓝色，从起点画到终点）；右下角的读数框显示最近一次落点和设备分辨率。落点有三个来源：① 服务端 <code>layer</code> 事件里的 <code>xy</code> / <code>xy2</code>（L0 的点按和滑动、L1a 点击控件都会带）；② <code>cmds</code> 里的 <code>input tap x y</code> / <code>input swipe …</code>；③ L2 的 <code>点 (x, y)</code>。用户手动点击画面也会标注，src 写成「手动」。</p>
 <blockquote>
-<p>唔用 Android 开发者选项：实测 <code>settings put system pointer_location 1</code> 只显示顶栏坐标图，<code>adb shell input tap</code> 注入的手势<strong>唔会</strong>出现在叠加层（注入事件唔经触摸屏那一层），<code>show_touches</code> 同理——所以自己画。</p>
+<p>之所以不用 Android 开发者选项：实测 <code>settings put system pointer_location 1</code> 只显示顶栏的坐标图，<code>adb shell input tap</code> 注入的手势<strong>不会</strong>出现在叠加层上（注入事件不经过触摸屏那一层），<code>show_touches</code> 也是同样情况 —— 所以这里自己画。</p>
 </blockquote>
-<h4>3.4.18 装应用快路径（v0.39）</h4>
-<p>原本「下载安装 X 并打开」实测 <strong>18 步</strong>，四个成因逐个打：</p>
-<table>
-<thead>
-<tr>
-<th>成因</th>
-<th>浪费</th>
-<th>做法</th>
-<th>落喺边一区</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>冇商店概念：靠视觉翻抽屉搵商店</td>
-<td>5 步</td>
-<td><code>stores()</code> 用 <code>pm list packages</code> 对照 14 条商店表（应用宝→小米→华为→…→Google Play 排最后）；L0 直接开最前嗰个</td>
-<td><strong>事实层</strong>（adb 先查清）</td>
-</tr>
-<tr>
-<td>开屏广告 + 点搜索框被弹去广告</td>
-<td>3 步</td>
-<td><code>STORE_SEARCH_ACT</code> 直落 <code>com.tencent.nucleus.search.SearchActivity</code>，跳过 Splash</td>
-<td><strong>路由层</strong>（多一条确定性入口）</td>
-</tr>
-<tr>
-<td>中文输入唔到（<code>input text</code> 打中文 NPE）</td>
-<td>卡死</td>
-<td><code>input_text()</code> 装 ADBKeyBoard 用 broadcast 落 unicode；未装就退 <code>input text</code>（只 ASCII）</td>
-<td><strong>执行层</strong>（L0 落字能力）</td>
-</tr>
-<tr>
-<td>装完对住「Installing…」空等</td>
-<td>5–6 步</td>
-<td><code>_install_watcher()</code> 每 2 s 查包表：装咗即 <code>am start</code>（弹窗顶住就退一步重试 3 次）、<code>pm grant</code> 通知、<code>terminate</code> 模型</td>
-<td><strong>收尾判定层</strong>（adb 确认，取代模型自述）</td>
-</tr>
-</tbody>
-</table>
-<p>另：<code>l2_next</code> 令开商店后直接落 L2（唔再扫 L1a/L1b，省 ~7 s）；指代词（佢/呢个）唔当控件名；<code>install_target()</code> 统一抽名（修「安装快手」被抓成 app 名）；补 百度贴吧 / 快手极速版 别名。</p>
-<p><strong>实测</strong>：百度贴吧 18 步 → 高德地图 <strong>5 步</strong>（装完即收尾，<code>com.autonavi.minimap</code>）；腾讯地图 13 步（模型自己做完，前台 <code>com.tencent.map</code> 已核）。</p>
-<h4>3.4.17 语义路由层（S 层）</h4>
-<p><strong>一句话</strong>：规则先跑（命中就 0 模型、0 延迟）；<strong>三层规则全 miss 才问一次模型</strong>，只拿「意图 + 槽位」，再按路由表派去 L0 / L1a / L1b。L1a、L1b 一样食语义，唔止 L0。</p>
+<h4>2.4.17 语义路由层（S 层）</h4>
+<p><strong>一句话概括</strong>：先跑规则（命中时不动用模型，也没有额外延迟）；<strong>三层规则全部未命中，才问模型一次</strong>，只取「意图 + 槽位」，再按路由表派发到 L0 / L1a / L1b。L1a 和 L1b 同样接收语义结果，不只是 L0。</p>
 <pre><code>L0 规则 → L1a 规则 → L1b 规则 ──全 miss──→ S 层（一次 LLM，只出 JSON）
                                             ├ intent ∈ L0 能力 → L0 执行器
                                             ├ tap              → L1b（有 socket）→ L1a
@@ -1481,34 +1400,34 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <tr>
 <th>intent 类</th>
 <th>派去</th>
-<th>命令由边个拼</th>
+<th>命令由哪个拼装</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>open_app</code> <code>check_installed</code> <code>uninstall</code> <code>force_stop</code> <code>clear_data</code> <code>back</code> <code>home</code> <code>screenshot</code></td>
 <td><strong>L0</strong></td>
-<td>组一句规范讲法交 <code>l0_try()</code>（<code>uninstall+淘宝</code> → <code>卸载淘宝</code>），包名解析 / 断言 / <code>final</code> 全部复用 L0，唔另写一套</td>
+<td>拼装一句规范说法交给 <code>l0_try()</code>（<code>uninstall+淘宝</code> → <code>卸载淘宝</code>），包名解析、断言和 <code>final</code> 全部复用 L0，不另外写一套</td>
 </tr>
 <tr>
 <td><code>tap</code></td>
-<td><strong>L1b</strong> 优先（41–56 ms）→ 唔得转 <strong>L1a</strong></td>
+<td><strong>L1b</strong> 优先（41–56 ms）→ 不成功再转 <strong>L1a</strong></td>
 <td><code>agent-device snapshot</code> → <code>input tap</code></td>
 </tr>
 <tr>
 <td><code>input</code> <code>search</code></td>
-<td><strong>L1b</strong>（IME 未做，冇 socket 即 L2）</td>
+<td><strong>L1b</strong>（IME 未做，没有 socket 就走 L2）</td>
 <td>CDP <code>Input.insertText</code></td>
 </tr>
 </tbody>
 </table>
-<p><strong>硬约束</strong>：模型唔准出 shell／adb 字符串；包名一律本地 <code>resolve_package()</code> 校验；intent 唔在白名单 → 直接 L2。</p>
-<p><strong>校验与降级</strong>：坏 JSON 重试 1 次；<code>confidence &lt; 0.6</code>、白名单外、超时 → 落 L2，唔赌。</p>
+<p><strong>硬约束</strong>：模型不许输出 shell 或 adb 字符串；包名一律由本地 <code>resolve_package()</code> 校验；intent 不在白名单里就直接走 L2。</p>
+<p><strong>校验与降级</strong>：JSON 解析失败重试 1 次；<code>confidence &lt; 0.6</code>、不在白名单、超时，都落到 L2，不赌。</p>
 <p><strong>模型与兜底（老板 2026-10-27 拍板）</strong></p>
 <ul>
-<li>主力 <strong><code>traework/DeepSeek-V4-Pro-Official</code></strong>，超时 8 s；超时/调唔通自动降 <strong><code>DeepSeek-V4-Flash-Official</code></strong>（2.2–2.6 s）补一刀；两把都唔得才 L2</li>
-<li>句级缓存 24 h（<code>~/.qphone/sem-cache.json</code>，最多 200 句）；危险 intent 唔加二次确认，靠日志追溯</li>
-<li>别名自愈：语义命中且执行成功 → 写 <code>~/.qphone/alias-learned.json</code> 并即时进 <code>APP_ALIASES</code>，下次同讲法由规则直接命中（0 模型）</li>
+<li>主力是 <strong><code>traework/DeepSeek-V4-Pro-Official</code></strong>，超时 8 s；超时或调用不通时自动降级到 <strong><code>DeepSeek-V4-Flash-Official</code></strong>（2.2–2.6 s）补一次；两个都不行才走 L2</li>
+<li>按句缓存 24 h（<code>~/.qphone/sem-cache.json</code>，最多 200 句）；危险 intent 不做二次确认，靠日志追溯</li>
+<li>别名自愈：语义命中并且执行成功之后，写入 <code>~/.qphone/alias-learned.json</code> 并立即加入 <code>APP_ALIASES</code>，下次同样的说法由规则直接命中（不动用模型）</li>
 </ul>
 <table>
 <thead>
@@ -1522,12 +1441,12 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <tr>
 <td><code>DeepSeek-V4-Pro-Official</code>（主力）</td>
 <td>2.1 / 4.4 / 4.4 / 4.7 / 5.5 / <strong>27.0</strong> s</td>
-<td>准但慢（复杂句 reasoning 400–800 token）；<code>reasoning_effort=minimal</code> 12.3 s、<code>enable_thinking:false</code> 10.3 s 仍慢 → 必须有 Flash 兜底</td>
+<td>准确但慢（复杂句的 reasoning 有 400–800 token）；<code>reasoning_effort=minimal</code> 时 12.3 s、<code>enable_thinking:false</code> 时 10.3 s，依然慢 → 必须有 Flash 兜底</td>
 </tr>
 <tr>
 <td><code>DeepSeek-V4-Flash-Official</code>（兜底）</td>
 <td>2.2 / 2.5 / 2.6 s</td>
-<td>稳，3/3 正确</td>
+<td>稳定，3/3 正确</td>
 </tr>
 <tr>
 <td><code>mimo-v2.6-flash</code></td>
@@ -1537,7 +1456,7 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <tr>
 <td><code>glm-5.3-flash</code> / <code>qoder/qwen3.8-flash</code></td>
 <td>3.9–6.1 s / 超时 ×3</td>
-<td>唔用</td>
+<td>不使用</td>
 </tr>
 </tbody>
 </table>
@@ -1551,34 +1470,74 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </thead>
 <tbody>
 <tr>
-<td><code>将淘宝卸咗佢</code>（三层全 miss）</td>
+<td><code>将淘宝卸咗佢</code>（三层全部未命中）</td>
 <td>三层 skip → Pro 3.9 s → <code>uninstall 淘宝</code> → <strong>L0 55 ms</strong>「未安装」；步骤日志标签 <code>语义→L0</code></td>
 </tr>
 <tr>
-<td>同一句再讲</td>
-<td><strong>65 ms</strong>（缓存命中，0 模型）</td>
+<td>同一句话再说一次</td>
+<td><strong>65 ms</strong>（缓存命中，不动用模型）</td>
 </tr>
 <tr>
 <td><code>帮我睇下百度网盘装咗未</code></td>
-<td><strong>39 ms</strong> 走 L0 查询「有装：com.baidu.netdisk」</td>
+<td><strong>39 ms</strong>，走 L0 查询，返回「有装：com.baidu.netdisk」</td>
 </tr>
 <tr>
 <td><code>揿一下『网络和互联网』</code></td>
-<td><code>tap</code> → L1b 冇文字 → L1a「无障碍树冇呢个控件」，如实 miss</td>
+<td><code>tap</code> → L1b 没有文字 → L1a 报「无障碍树冇呢个控件」，如实未命中</td>
 </tr>
 </tbody>
 </table>
-<p><strong>开关与自查</strong>：<code>QPHONE_SEM=0</code> 全关；<code>QPHONE_SEM_MODEL</code> / <code>QPHONE_SEM_FALLBACK</code> / <code>QPHONE_SEM_TIMEOUT</code> 可调；<code>GET /layers</code> → <code>semantic</code>（模型、超时、缓存、统计、上次解析）。</p>
-<p><strong>本版唔做</strong>：多步任务拆解（仍 <code>unknown</code> → L2）、<code>scroll</code> 执行器、中文 IME 输入。</p>
-</section><section class="card"><h2>4. 用户界面详细设计</h2>
-<h3>4.1 界面结构</h3>
-<p>主界面是壳里的对话。本文不重画这个界面。</p>
-<p>云机画面不是主界面，也不出现在壳里。要人接手时，画面在云机一侧打开。</p>
-<h3>4.2 处理流程与约束</h3>
-<p>人在对话里输入。看到要人之后，到云机一侧看那部机器，不要求把画面转到当前电脑。</p>
-<p>约束：壳不写死平台，也不写死云机来源。换云机（容器 ↔ 租用实例）只改控制程序，壳一行不动。</p>
-<p>模型地址由人在控制程序一侧填写。本文不代填。<br>
-<strong>结果卡（<code>.task</code>）配色约束</strong>：结果行 <code>.t-dt</code> 用 <code>var(--fg)</code>（亮色实测对比 16.5:1），步数行 <code>.t-step</code> 用 <code>var(--soft)</code>（6.3:1）；暗色用 <code>html[data-theme="dark"]</code> 单独保留原浅色值。⚠️ 唔可以再写死 <code>#cfd8e3</code> / <code>#e9d9a8</code> 一类暗色专用色——亮色主题下会变「睇唔到字」。</p>
+<p><strong>开关与自查</strong>：<code>QPHONE_SEM=0</code> 可以整体关闭；<code>QPHONE_SEM_MODEL</code>、<code>QPHONE_SEM_FALLBACK</code>、<code>QPHONE_SEM_TIMEOUT</code> 可以调整；<code>GET /layers</code> 会返回 <code>semantic</code> 字段（包含模型、超时、缓存、统计和上一次解析结果）。</p>
+<p><strong>本版不做</strong>：多步任务拆解（仍然落到 <code>unknown</code> 再进 L2）、<code>scroll</code> 执行器、中文 IME 输入。</p>
+<h4>2.4.18 装应用快路径（v0.39）</h4>
+<p>原本「下载安装 X 并打开」实测需要 <strong>18 步</strong>，针对四个成因逐个处理：</p>
+<table>
+<thead>
+<tr>
+<th>成因</th>
+<th>浪费</th>
+<th>做法</th>
+<th>作用在哪一层</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>没有商店概念：靠视觉翻抽屉找商店</td>
+<td>5 步</td>
+<td><code>stores()</code> 用 <code>pm list packages</code> 对照 14 条商店表（应用宝→小米→华为→…→Google Play 排最后）；L0 直接打开排在第一个的商店</td>
+<td><strong>事实层</strong>（先用 adb 查清）</td>
+</tr>
+<tr>
+<td>开屏广告 + 点搜索框被弹去广告</td>
+<td>3 步</td>
+<td><code>STORE_SEARCH_ACT</code> 直接落到 <code>com.tencent.nucleus.search.SearchActivity</code>，跳过 Splash 页</td>
+<td><strong>路由层</strong>（多一条确定性入口）</td>
+</tr>
+<tr>
+<td>中文输入不了（<code>input text</code> 打中文会 NPE）</td>
+<td>卡死</td>
+<td><code>input_text()</code> 安装 ADBKeyBoard，用 broadcast 发送 unicode；没有安装就退回 <code>input text</code>（只支持 ASCII）</td>
+<td><strong>执行层</strong>（L0 的输入文字能力）</td>
+</tr>
+<tr>
+<td>装完之后对着「Installing…」空等</td>
+<td>5–6 步</td>
+<td><code>_install_watcher()</code> 每 2 s 查一次包表：装好就 <code>am start</code>（被弹窗挡住就退一步重试 3 次）、<code>pm grant</code> 通知权限、<code>terminate</code> 模型</td>
+<td><strong>收尾判定层</strong>（用 adb 确认，取代模型自述）</td>
+</tr>
+</tbody>
+</table>
+<p>另外：<code>l2_next</code> 让打开商店之后直接落到 L2（不再扫 L1a 和 L1b，省下约 7 s）；指代词（「佢」「呢个」）不作为控件名使用；<code>install_target()</code> 统一抽取应用名（修正「安装快手」被误抓成 app 名的问题）；补充百度贴吧、快手极速版的别名。</p>
+<p><strong>实测</strong>：百度贴吧 18 步 → 高德地图 <strong>5 步</strong>（装完立刻收尾，<code>com.autonavi.minimap</code>）；腾讯地图 13 步（模型自己完成，前台 <code>com.tencent.map</code> 已核实）。</p>
+</section><section class="card"><h2>3. 用户界面详细设计</h2>
+<h3>3.1 界面结构</h3>
+<p>主界面就是壳里的对话窗口，本文不重新绘制这个界面。</p>
+<p>云机的画面不是主界面，也不放进壳里。需要人接手的时候，画面会在云机那一侧打开。</p>
+<h3>3.2 处理流程与约束</h3>
+<p>人在对话里输入一句话。如果系统提示需要人接手，人就去云机那一侧看这台机器，不要求把画面传回当前电脑。</p>
+<p>约束：壳不写死平台，也不写死云机的来源。更换云机（容器换成租用实例）时只改控制程序，壳一行代码都不用动。</p>
+<p>模型地址由人在控制程序一侧填写，本文不代为填写。</p>
+<p><strong>结果卡的配色约束</strong>：结果行 <code>.t-dt</code> 使用 <code>var(--fg)</code>（亮色主题下实测对比度为 16.5:1），步数行 <code>.t-step</code> 使用 <code>var(--soft)</code>（对比度 6.3:1）；暗色主题通过 <code>html[data-theme="dark"]</code> 单独保留原来的浅色值。不要再写死 <code>#cfd8e3</code>、<code>#e9d9a8</code> 这类只适合暗色的颜色，否则在亮色主题下会出现「看不见字」的问题。</p>
 </section><section class="card"><h2>附录 A 词汇表</h2>
 <table>
 <thead>
@@ -1590,19 +1549,19 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <tbody>
 <tr>
 <td>云机</td>
-<td>redroid 13 容器（arm64，<code>localhost:5556</code>）。唯一执行目标</td>
+<td>redroid 13 容器（arm64，<code>localhost:5556</code>），是唯一的执行目标</td>
 </tr>
 <tr>
 <td>控制程序</td>
-<td>Mobilerun + <code>qphone.py</code> + <code>layers.py</code>。近云机一侧，经 adb 操作云机</td>
+<td>Mobilerun 加 <code>qphone.py</code>、<code>layers.py</code>，位于靠近云机的一侧，通过 adb 操作云机</td>
 </tr>
 <tr>
 <td>壳</td>
-<td>客户端。只发交代、只收结果，不含 agent</td>
+<td>客户端，只负责发出任务、接收结果，内部不包含 agent</td>
 </tr>
 <tr>
 <td>对照</td>
-<td>同一台虚拟机里的 A9。不是运行程序</td>
+<td>同一台虚拟机里的 A9，只作对照，不是运行程序</td>
 </tr>
 </tbody>
 </table>
@@ -1618,44 +1577,372 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <tbody>
 <tr>
 <td>B1</td>
-<td>客户端把交代送到控制程序，走什么通道</td>
-<td><strong>2026-10-22 定</strong>：<code>POST /turn</code> + 事件流（progress / needs_human / result / status）。实现未做</td>
+<td>客户端把任务送到控制程序，用什么通道</td>
+<td><strong>2026-10-22 已定</strong>：<code>POST /turn</code> 加事件流（progress / needs_human / result / status），实现尚未开始</td>
 </tr>
 <tr>
 <td>B2</td>
 <td>Rakazo 的「电脑」能不能接到云机</td>
-<td><strong>作废</strong>。Rakazo 2026-10-22 已完整删除</td>
+<td><strong>作废</strong>。Rakazo 已于 2026-10-22 完整删除</td>
 </tr>
 <tr>
 <td>B3</td>
-<td>第一版点的那一步，是哪个应用</td>
+<td>第一版点下去的那一步，选哪个应用</td>
 <td>未定</td>
 </tr>
 <tr>
 <td>B4</td>
-<td>控制程序的仓库名、许可证</td>
-<td>仓库 <code>qphone-bot-dev</code>（暂定名）；许可证待定（对外开源前选 MIT）</td>
+<td>控制程序的仓库名和许可证</td>
+<td>仓库名 <code>qphone-bot-dev</code>（暂定）；许可证待定（对外开源前选 MIT）</td>
 </tr>
 <tr>
 <td>B5</td>
-<td>数据盘路径，以及清空指令的形式</td>
-<td>已定：宿主机 <code>~/redroid13-data</code> 挂容器 <code>/data</code>，清空＝删该目录</td>
+<td>数据盘的路径，以及清空指令的形式</td>
+<td>已定：宿主机 <code>~/redroid13-data</code> 挂载到容器的 <code>/data</code>，清空就是删除该目录</td>
 </tr>
 <tr>
 <td>B6</td>
 <td>Mobilerun 接入云机的具体接法</td>
-<td>已核实：redroid 13 arm64 装 Portal 0.7.27（<code>mobilerun setup</code>），<code>ping</code> 通，一单「帮我打开设置」跑完</td>
+<td>已核实：redroid 13 arm64 安装 Portal 0.7.27（<code>mobilerun setup</code>），<code>ping</code> 通，跑完过一单「帮我打开设置」</td>
 </tr>
 <tr>
 <td>B7</td>
 <td>壳的形态</td>
-<td>未定。候选：Telegram / Hermes 桌面顶，或自写 Tauri / Electron 薄壳</td>
+<td>未定。候选：Telegram、Hermes 桌面顶栏，或者自己写 Tauri / Electron 薄壳</td>
 </tr>
 </tbody>
 </table>
+</section><section class="card"><h2>附录 C 执行层 L0 能力清单</h2>
+<p>L0 是<strong>确定性命令层</strong>：靠正则表达式和包名表直接下手，<strong>不调用任何模型</strong>。目前覆盖 20 项能力、68 条别名，分成五大类。</p>
+<p>进入 L0 之前有两道预处理：第一步清掉语气词和客套词（例如「帮我」「唔该」「一下」「吧」「啊」「嘛」「咯」）；第二步查 68 条别名表（例如 应用宝、百度网盘、360浏览器、抖音、小红书、百度贴吧），语义层学到的新别名会写入 <code>~/.qphone/alias-learned.json</code>。</p>
+<h3>C.1 应用管理（7 项）</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>可用说法</th>
+<th>执行命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>打开</td>
+<td><code>打开</code>、<code>开</code>、<code>启动</code>、<code>进入</code>、<code>去</code>、<code>用</code> 加上名称；也支持 <code>去&lt;app&gt;做X</code> 的说法</td>
+<td><code>am start -W -n pkg/act</code></td>
+</tr>
+<tr>
+<td>关闭</td>
+<td><code>关掉</code>、<code>关闭</code>、<code>杀掉</code>、<code>结束</code> 加上名称</td>
+<td><code>am force-stop pkg</code></td>
+</tr>
+<tr>
+<td>卸载</td>
+<td><code>卸载</code>、<code>卸掉</code>、<code>删掉</code>、<code>移除</code> 加上名称，后面可以带「掉」「了」和句尾语气词</td>
+<td><code>pm uninstall pkg</code>；查不到包名时直接报告「包表里没有」并附上机上的第三方应用清单，然后收工</td>
+</tr>
+<tr>
+<td>清数据</td>
+<td><code>清X数据</code>、<code>清除X的数据</code></td>
+<td><code>pm clear pkg</code></td>
+</tr>
+<tr>
+<td>查有没有安装</td>
+<td><code>有无装X</code>、<code>有冇装X</code>、<code>X装咗未</code>、<code>X装了吗</code>（两种语序都支持）</td>
+<td><code>pm list packages pkg</code>，<strong>结论放在最前面</strong>：<code>有：pkg</code> 或 <code>没有：pkg</code></td>
+</tr>
+<tr>
+<td>安装 APK</td>
+<td><code>安装 /sdcard/xxx.apk</code>，必须带路径</td>
+<td><code>pm install -r</code></td>
+</tr>
+<tr>
+<td>列出已安装</td>
+<td><code>列包</code>、<code>有咩app</code>、<code>睇下装咗咩应用</code></td>
+<td><code>pm list packages -3</code></td>
+</tr>
+</tbody>
+</table>
+<h3>C.2 设备设置（4 项）</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>可用说法</th>
+<th>执行命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>音量</td>
+<td><code>音量 大</code>、<code>音量 小</code>、<code>音量 加</code>、<code>音量 减</code>、<code>静音</code>、<code>音量 5</code></td>
+<td><code>cmd media_session volume</code></td>
+</tr>
+<tr>
+<td>亮度</td>
+<td><code>亮度 120</code>、<code>调亮度到 80</code></td>
+<td><code>settings put system screen_brightness</code></td>
+</tr>
+<tr>
+<td>Wi-Fi 与蓝牙</td>
+<td><code>打开wifi</code>、<code>关掉蓝牙</code>、<code>开无线</code></td>
+<td><code>svc wifi</code> / <code>cmd bluetooth_manager</code></td>
+</tr>
+<tr>
+<td>飞行模式</td>
+<td><code>开启飞行模式</code>、<code>关飞行模式</code></td>
+<td><code>settings put global airplane_mode_on</code></td>
+</tr>
+</tbody>
+</table>
+<h3>C.3 输入与导航（5 项）</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>可用说法</th>
+<th>执行命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>点坐标</td>
+<td><code>点 120,340</code>、<code>点击(120,340)</code>、<code>tap 500,800</code></td>
+<td><code>input tap x y</code></td>
+</tr>
+<tr>
+<td>滑动</td>
+<td><code>滑 100,200,100,800</code>、<code>滑动(...)</code></td>
+<td><code>input swipe x1 y1 x2 y2</code></td>
+</tr>
+<tr>
+<td>文字输入</td>
+<td><code>输入 hello123</code></td>
+<td>装了 ADBKeyBoard 时用广播方式输入，<strong>中文也能输入</strong>；没装就只能用 <code>input text</code>，只支持 ASCII</td>
+</tr>
+<tr>
+<td>按键</td>
+<td><code>回桌面</code> 对应 KEYCODE 3，<code>返回</code>／<code>后退</code>／<code>back</code> 对应 KEYCODE 4（目前只接了这两个键）</td>
+<td><code>input keyevent</code></td>
+</tr>
+<tr>
+<td>回桌面</td>
+<td><code>回桌面</code>、<code>返主页</code>、<code>去首页</code>、<code>home</code></td>
+<td><code>keyevent 3</code></td>
+</tr>
+</tbody>
+</table>
+<h3>C.4 信息采集（3 项）</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>可用说法</th>
+<th>执行命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>查前台</td>
+<td><code>查前台</code>、<code>现在系咩app</code>、<code>当前系咩界面</code></td>
+<td><code>dumpsys activity activities</code> 取 <code>topResumedActivity</code></td>
+</tr>
+<tr>
+<td>读属性</td>
+<td><code>属性 ro.product.model</code>、<code>getprop ro.xxx</code></td>
+<td><code>getprop key</code></td>
+</tr>
+<tr>
+<td>截图</td>
+<td>任何包含「截图」「截屏」「screenshot」的说法</td>
+<td><code>screencap -p /sdcard/qphone-&lt;ts&gt;.png</code></td>
+</tr>
+</tbody>
+</table>
+<h3>C.5 跳转（1 项）</h3>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>可用说法</th>
+<th>执行命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>打开网址</td>
+<td><code>打开 https://…</code></td>
+<td><code>am start -a ACTION_VIEW -d url</code></td>
+</tr>
+</tbody>
+</table>
+<h3>C.6 安装应用的快路径（v0.39）</h3>
+<p>遇到「下载安装 X 并打开」这类任务时，不再让 L2 去摸索：L0 先查商店表，用 <code>am start</code> 直接跳到商店的搜索页，用 ADBKeyBoard 输入中文，再按回车；同时 <code>_install_watcher()</code> 每 2 秒查一次包表，一旦装上就打开 App、用 <code>pm grant</code> 授予通知权限，并叫停模型（详见 §2.4.18）。</p>
+<h3>C.7 L0 不覆盖的范围</h3>
+<table>
+<thead>
+<tr>
+<th>情况</th>
+<th>交给哪一层</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>必须看界面才能知道点哪里（例如在设置里点「网络和互联网」、点列表第 3 项、滚动加载更多）</td>
+<td>L1a（无障碍树）</td>
+</tr>
+<tr>
+<td>在 WebView 内部点击</td>
+<td>L1b（通过 CDP 直接执行 JS）</td>
+</tr>
+<tr>
+<td>把中文自由文字输入到指定输入框（没有 ADBKeyBoard 时）</td>
+<td>L2，或等接入自建输入法</td>
+</tr>
+<tr>
+<td>跨多步的复合任务、登录、验证码、付款</td>
+<td>L2（需要人做的步骤交给接管卡）</td>
+</tr>
+</tbody>
+</table>
+</section><section class="card"><h2>附录 D 参考资料</h2>
+<h3>D.1 项目文档</h3>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>详细设计说明书模板</td>
+<td><code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></td>
+</tr>
+<tr>
+<td>产品方向</td>
+<td><code>~/目标/事业/QPhone Bot/产品方向-2026-10-16.md</code></td>
+</tr>
+<tr>
+<td>设计意见</td>
+<td><code>docs/设计意见.md</code></td>
+</tr>
+<tr>
+<td>落地目标清单</td>
+<td><code>docs/落地目标清单.md</code></td>
+</tr>
+<tr>
+<td>里程碑记录</td>
+<td><code>docs/里程碑-2026-10-23.md</code></td>
+</tr>
+</tbody>
+</table>
+<h3>D.2 本项目用到的开源项目</h3>
+<p>「是否随产品分发」这一列很关键：标「是」的组件会进入交付物，必须保留许可证和版权声明；只在本机或开发环境使用的，不属于分发范围。</p>
+<table>
+<thead>
+<tr>
+<th>开源项目</th>
+<th>版本</th>
+<th>许可证</th>
+<th>本项目里的用途</th>
+<th>是否随产品分发</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mobilerun（<code>droidrun/mobilerun</code>）</td>
+<td>0.7.0</td>
+<td>MIT</td>
+<td>L2 视觉 agent 框架，负责看屏幕做决策</td>
+<td>是（装进控制程序）</td>
+</tr>
+<tr>
+<td>mobilerun-core-local（<code>droidrun/mobilerun-core-local</code>）</td>
+<td>0.7.0</td>
+<td>MIT</td>
+<td>Mobilerun 的本地执行内核</td>
+<td>是（随 Mobilerun 安装）</td>
+</tr>
+<tr>
+<td>Mobilerun Portal APK（<code>com.mobilerun.portal</code>）</td>
+<td>0.7.28</td>
+<td>MIT（随 Mobilerun 分发）</td>
+<td>装在云机上，向 Mobilerun 提供无障碍树和点击能力</td>
+<td>是（装进云机）</td>
+</tr>
+<tr>
+<td>agent-device（<code>callstack/agent-device</code>）</td>
+<td>0.21.31</td>
+<td>MIT</td>
+<td>L1a 阶段取无障碍树快照（<code>agent-device snapshot</code>）</td>
+<td>是</td>
+</tr>
+<tr>
+<td>agent-device snapshothelper（<code>com.callstack.agentdevice.snapshothelper</code>）</td>
+<td>随 agent-device</td>
+<td>MIT（随 agent-device 分发）</td>
+<td>云机侧辅助快照的 APK</td>
+<td>是（装进云机）</td>
+</tr>
+<tr>
+<td>redroid（<code>redroid/redroid:13.0.0_64only-latest</code>）</td>
+<td>13.0.0_64only-latest</td>
+<td>仓库未附 LICENSE 文件；系统主体来自 AOSP（Apache-2.0 为主），内核模块随 Linux 内核（GPL-2.0）</td>
+<td>云机操作系统本身</td>
+<td>是（云机基础），<strong>正式分发前需法务确认</strong></td>
+</tr>
+<tr>
+<td>Android Platform Tools（adb）</td>
+<td>37.0.1</td>
+<td>Apache-2.0</td>
+<td>控制程序与云机之间唯一的通信手段</td>
+<td>是（运行依赖）</td>
+</tr>
+<tr>
+<td>ADBKeyBoard（<code>senzhk/ADBKeyBoard</code>）</td>
+<td>未标版本（APK 17 KB）</td>
+<td><strong>GPL-2.0</strong></td>
+<td>中文输入：通过广播把 unicode 文字送进输入框</td>
+<td><strong>否，仅内部测试安装</strong>。GPL-2.0 有传染性，不可随商业产品分发；要随产品走必须换成自研输入法或宽松许可的替代品</td>
+</tr>
+<tr>
+<td>colima（<code>abiosoft/colima</code>）</td>
+<td>v0.10.3</td>
+<td>MIT</td>
+<td>在 macOS 上跑 Linux 虚拟机，用来承载容器</td>
+<td>否（开发与运行环境）</td>
+</tr>
+<tr>
+<td>Docker Engine（Moby）</td>
+<td>29.8.1</td>
+<td>Apache-2.0</td>
+<td>跑 redroid 容器</td>
+<td>否（运行环境）</td>
+</tr>
+<tr>
+<td>uv（<code>astral-sh/uv</code>）</td>
+<td>0.11.7</td>
+<td>Apache-2.0 / MIT 双许可</td>
+<td>安装并隔离 Mobilerun 的 Python 环境</td>
+<td>否（开发工具）</td>
+</tr>
+<tr>
+<td>CPython</td>
+<td>3.11（Mobilerun 环境）</td>
+<td>PSF-2.0</td>
+<td>控制程序和 <code>layers.py</code> 的运行语言</td>
+<td>是（运行依赖）</td>
+</tr>
+</tbody>
+</table>
+<h3>D.3 传递依赖</h3>
+<p>Mobilerun 通过 <code>uv tool install</code> 装进独立环境，目前带进来 213 个 Python 包，环境体积约 710 MB，许可证以 MIT、BSD、Apache-2.0 为主。这些包不直接调用，但会随控制程序一起分发，所以对外发布前需要跑一次许可证清单。</p>
+<p>生成当前环境完整清单的命令：</p>
+<pre><code class="language-bash">uv pip list --python ~/.local/share/uv/tools/mobilerun/bin/python
+</code></pre>
 </section><section class="card"><h2>版本变更历史</h2>
 <blockquote>
-<p>只记一句结论；改动细节、实测数据、踩过嘅坑睇 <code>docs/里程碑-2026-10-23.md</code> 对应小节。</p>
+<p>只记一句结论；改动细节、实测数据和踩过的坑，看 <code>docs/里程碑-2026-10-23.md</code> 对应小节。</p>
 </blockquote>
 <table>
 <thead>
@@ -1667,43 +1954,53 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </thead>
 <tbody>
 <tr>
+<td>v0.42</td>
+<td>删除「1. 引言」整块，参考资料移到文末附录 D 并补全开源项目清单；§1.1 系统目标改为「跑通以下几个通用场景」；全文改写成通顺的书面中文</td>
+<td>10-27</td>
+</tr>
+<tr>
+<td>v0.41</td>
+<td>删「1. 引言」整块（1.1 编写目的／1.2 文档约定／1.3 适用范围），参考资料移去文末「附录 D」</td>
+<td>10-27</td>
+</tr>
+<tr>
 <td>v0.40</td>
-<td>§2.1 系统目标重写：一句话 + 三条落地场景（G1/G2/G3）+ 三条底线 + 唔做清单 + 登录态卡口；新增 <code>docs/落地目标清单.md</code> 定稿</td>
+<td>§1.1 系统目标重写：一句话 + 三条落地场景（G1/G2/G3）+ 三条底线 + 不做清单 + 登录态卡口；新增 <code>docs/落地目标清单.md</code> 定稿</td>
 <td>10-27</td>
 </tr>
 <tr>
 <td>v0.39</td>
-<td>装应用快路径（18→5 步）+ 查询类结论排头 + 坐标叠层 + 附录 C L0 能力清单（§3.4.18、§3.4.14、附录 C）</td>
+<td>装应用快路径（18→5 步）+ 查询类结论排头 + 坐标叠层 + 附录 C L0 能力清单（§2.4.18、§2.4.14、附录 C）</td>
 <td>10-27</td>
 </tr>
 <tr>
 <td>v0.38</td>
-<td><strong>语义路由层 S 落地</strong>：三层规则全 miss 才问一次模型出「意图+槽位」，派去 L0/L1a/L1b（§3.4.17）</td>
+<td><strong>语义路由层 S 落地</strong>：三层规则全未命中才问一次模型，产出「意图+槽位」，再派给 L0/L1a/L1b（§2.4.17）</td>
 <td>10-27</td>
 </tr>
 <tr>
 <td>v0.37</td>
-<td>S 层设计稿（规则先行 + 语义兜底，L1a/L1b 一样食语义）</td>
+<td>S 层设计稿（规则先行 + 语义兜底，L1a/L1b 一样消费语义结果）</td>
 <td>10-27</td>
 </tr>
 <tr>
 <td>v0.36</td>
-<td><strong>L0 解析纪律</strong>：语气词 / 补语 / 别名表补洞；卸载查唔到包即刻报，唔落 L2</td>
+<td><strong>L0 解析纪律</strong>：语气词、补语、别名表补洞；卸载时查不到包立即报告，不落到 L2</td>
 <td>10-27</td>
 </tr>
 <tr>
 <td>v0.35</td>
-<td>步骤日志过程行加<strong>服务端副本</strong>，刷新后由 <code>/history</code> 重放</td>
+<td>步骤日志的过程行增加<strong>服务端副本</strong>，刷新后由 <code>/history</code> 重放</td>
 <td>10-27</td>
 </tr>
 <tr>
 <td>v0.34</td>
-<td><strong>接管场景分类</strong>：只有人肉步骤（登录/验证码/付款/扫码）弹人，技术失败唔弹</td>
+<td><strong>接管场景分类</strong>：只有必须人做的步骤（登录、验证码、付款、扫码）才弹人工接管，技术失败不弹</td>
 <td>10-27</td>
 </tr>
 <tr>
 <td>v0.33</td>
-<td>执行模型统一 <code>traework/DeepSeek-V4-Pro-Official</code></td>
+<td>执行模型统一为 <code>traework/DeepSeek-V4-Pro-Official</code></td>
 <td>10-27</td>
 </tr>
 <tr>
@@ -1713,7 +2010,7 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tr>
 <tr>
 <td>v0.31</td>
-<td>四只手运行时高亮；修 <code>layerMark()</code> 未命中/未轮到语义</td>
+<td>四只手运行时高亮；修 <code>layerMark()</code> 未命中、未轮到语义的问题</td>
 <td>10-26</td>
 </tr>
 <tr>
@@ -1723,72 +2020,72 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tr>
 <tr>
 <td>v0.29</td>
-<td>四手改竖排；坑：<code>paint()</code> 覆写 <code>className</code>，附加 class 用结构选择器</td>
+<td>四手改竖排；坑：<code>paint()</code> 覆写 <code>className</code>，附加 class 要用结构选择器</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.28</td>
-<td>架构图云机段拆四手；<code>cdp_targets()</code> 一 socket 一条 forward，修 forward 泄漏</td>
+<td>架构图云机段拆四手；<code>cdp_targets()</code> 一个 socket 一条 forward，修 forward 泄漏</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.27</td>
-<td>步骤日志内部滚动；取消完单自动回桌面（<code>QPHONE_HOME_AFTER=0</code>）</td>
+<td>步骤日志内部滚动；取消任务后自动回桌面（<code>QPHONE_HOME_AFTER=0</code>）</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.26</td>
-<td>新增步骤日志 <code>#slBody</code>（分组件、分色、去噪、去重）</td>
+<td>新增步骤日志 <code>#slBody</code>（分组件、分颜色、去噪、去重）</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.25</td>
-<td>版面：流程图面板 / 会话窗隔离，聊天区内滚，输入框吸底</td>
+<td>版面：流程图面板与会话窗隔离，聊天区内滚，输入框吸底</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.24</td>
-<td>命中更显眼；新增人工接管后续跑（最多 3 次，步数累计 ≤20）</td>
+<td>命中更显眼；新增人工接管后继续跑（最多 3 次，累计步数不超过 20）</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.23</td>
-<td>精简会话头条，只留状态点 + 清空</td>
+<td>精简会话头条，只留状态点和清空按钮</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.22</td>
-<td>修流程图箭头对唔齐（<code>::after</code> 抢用、虚线改 gradient）</td>
+<td>修流程图箭头对不齐（<code>::after</code> 抢用、虚线改 gradient）</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.21</td>
-<td>执行层命中动画 + 「执行层占比」统计</td>
+<td>执行层命中动画，增加「执行层占比」统计</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.20</td>
-<td>架构图并入本文（<code>架构图.html</code> 删除）</td>
+<td>架构图并入本文（删除 <code>架构图.html</code>）</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.19</td>
-<td>修包名误判（应用宝 / 印象笔记）；「去<app>做X」；<code>GET /layers</code> 公示触发条件</td>
+<td>修包名误判（应用宝 / 印象笔记）；支持「去<app>做X」；<code>GET /layers</code> 公示触发条件</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.18</td>
-<td>修三个实操 bug：气泡字色 / 每单步数清零 / 执行层覆盖太窄</td>
+<td>修三个实操 bug：气泡字色、每单步数清零、执行层覆盖太窄</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.17</td>
-<td>文档结构调整（§3.5 併入 §3.4）</td>
+<td>文档结构调整（§2.5 并入 §2.4）</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.16</td>
-<td>执行层改流程图内常驻组件（四格 + 命中高亮）</td>
+<td>执行层改为流程图内的常驻组件（四格 + 命中高亮）</td>
 <td>10-26</td>
 </tr>
 <tr>
@@ -1803,230 +2100,38 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tr>
 <tr>
 <td>v0.13</td>
-<td>修云机「存储有问题」：<code>/data</code> 改 Docker 命名卷</td>
+<td>修云机「存储有问题」：<code>/data</code> 改用 Docker 命名卷</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.12</td>
-<td>实况窗加触控（<code>/device/tap</code> <code>swipe</code> <code>key</code>）</td>
+<td>实况窗增加触控（<code>/device/tap</code>、<code>swipe</code>、<code>key</code>）</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.11</td>
-<td>本地 redroid 13 跑通 + <code>scripts/redroid-up.sh</code></td>
+<td>本地 redroid 13 跑通，新增 <code>scripts/redroid-up.sh</code></td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.10</td>
-<td>执行目标改本地（AVD → redroid），补三环境实测</td>
+<td>执行目标改到本地（AVD → redroid），补三个环境的实测</td>
 <td>10-26</td>
 </tr>
 <tr>
 <td>v0.9</td>
-<td>新增 §3.4 执行层设计（L0/L1a/L1b/L2）</td>
+<td>新增 §2.4 执行层设计（L0/L1a/L1b/L2）</td>
 <td>10-23</td>
 </tr>
 <tr>
 <td>v0.8</td>
-<td>改薄壳（删除 Rakazo）；通道定 <code>POST /turn</code> + 事件流</td>
+<td>改成薄壳（删除 Rakazo）；通道定为 <code>POST /turn</code> 加事件流</td>
 <td>10-22</td>
 </tr>
 <tr>
 <td>v0.7</td>
-<td>按详细设计说明书重写，只留已核实内容</td>
+<td>按详细设计说明书重写，只保留已核实的内容</td>
 <td>10-19</td>
-</tr>
-</tbody>
-</table>
-</section><section class="card"><h2>附录 C 执行层 L0 能力清单</h2>
-<p>L0 系<strong>确定性命令层</strong>：靠正则 + 包名表下手，<strong>零模型调用</strong>。现时 20 项能力、64 条别名，分五大类。</p>
-<p><strong>进 L0 之前两道预处理</strong>：① 清走语气词/客套词（帮我 / 唔该 / 一下 / 吧 / 啊 / 嘛 / 咯…）；② 查 64 条别名表（应用宝 / 百度网盘 / 360浏览器 / 抖音 / 小红书 / 百度贴吧…），语义层学到嘅新别名写 <code>~/.qphone/alias-learned.json</code>。</p>
-<h3>C.1 应用管理（7 项）</h3>
-<table>
-<thead>
-<tr>
-<th>场景</th>
-<th>可用讲法</th>
-<th>执行命令</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>打开</td>
-<td><code>打开/开/启动/进入/去/用/睇</code> + 名称；支持 <code>去&lt;app&gt;做X</code></td>
-<td><code>am start -W -n pkg/act</code></td>
-</tr>
-<tr>
-<td>关掉</td>
-<td><code>关掉/关闭/杀掉/结束 X</code></td>
-<td><code>am force-stop pkg</code></td>
-</tr>
-<tr>
-<td>卸载</td>
-<td><code>卸载/卸掉/删掉/移除 X</code>（可带 掉/咗/了/甩 + 句尾语气词）</td>
-<td><code>pm uninstall pkg</code>；查唔到包名就报「包表冇 + 机上第三方清单」收工</td>
-</tr>
-<tr>
-<td>清数据</td>
-<td><code>清X数据</code> / <code>清除X的数据</code></td>
-<td><code>pm clear pkg</code></td>
-</tr>
-<tr>
-<td>查有冇装</td>
-<td><code>有无装X</code> <code>有冇装X</code> <code>X装咗未</code> <code>X装了吗</code>（两种语序）</td>
-<td><code>pm list packages pkg</code>，<strong>结论排头</strong>：<code>有：pkg</code> / <code>冇：pkg</code></td>
-</tr>
-<tr>
-<td>装 APK</td>
-<td><code>安装 /sdcard/xxx.apk</code>（须带路径）</td>
-<td><code>pm install -r</code></td>
-</tr>
-<tr>
-<td>列已装</td>
-<td><code>列包</code> <code>有咩app</code> <code>睇下装咗咩应用</code></td>
-<td><code>pm list packages -3</code></td>
-</tr>
-</tbody>
-</table>
-<h3>C.2 设备设置（4 项）</h3>
-<table>
-<thead>
-<tr>
-<th>场景</th>
-<th>可用讲法</th>
-<th>执行命令</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>音量</td>
-<td><code>音量 大/细/小/加/减/静音/5</code></td>
-<td><code>cmd media_session volume</code></td>
-</tr>
-<tr>
-<td>亮度</td>
-<td><code>亮度 120</code> <code>调亮度到 80</code></td>
-<td><code>settings put system screen_brightness</code></td>
-</tr>
-<tr>
-<td>Wi-Fi / 蓝牙</td>
-<td><code>打开wifi</code> <code>关掉蓝牙</code> <code>开无线</code></td>
-<td><code>svc wifi</code> / <code>cmd bluetooth_manager</code></td>
-</tr>
-<tr>
-<td>飞行模式</td>
-<td><code>开启飞行模式</code> <code>关飞行模式</code></td>
-<td><code>settings put global airplane_mode_on</code></td>
-</tr>
-</tbody>
-</table>
-<h3>C.3 输入与导航（5 项）</h3>
-<table>
-<thead>
-<tr>
-<th>场景</th>
-<th>可用讲法</th>
-<th>执行命令</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>点坐标</td>
-<td><code>点 120,340</code> <code>点击(120,340)</code> <code>tap 500,800</code></td>
-<td><code>input tap x y</code></td>
-</tr>
-<tr>
-<td>滑动</td>
-<td><code>滑 100,200,100,800</code> <code>滑动(...)</code></td>
-<td><code>input swipe x1 y1 x2 y2</code></td>
-</tr>
-<tr>
-<td>文字输入</td>
-<td><code>输入 hello123</code></td>
-<td>有 ADBKeyBoard 用 broadcast（<strong>中文都落得</strong>）；冇就 <code>input text</code>（只 ASCII）</td>
-</tr>
-<tr>
-<td>按键</td>
-<td><code>回桌面</code> → KEYCODE 3；<code>返回/后退/back</code> → KEYCODE 4（现只接呢两个键）</td>
-<td><code>input keyevent</code></td>
-</tr>
-<tr>
-<td>回桌面</td>
-<td><code>回桌面</code> <code>返主页</code> <code>去首页</code> <code>home</code></td>
-<td><code>keyevent 3</code></td>
-</tr>
-</tbody>
-</table>
-<h3>C.4 信息采集（3 项）</h3>
-<table>
-<thead>
-<tr>
-<th>场景</th>
-<th>可用讲法</th>
-<th>执行命令</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>查前台</td>
-<td><code>查前台</code> <code>现在系咩app</code> <code>当前系咩界面</code></td>
-<td><code>dumpsys activity activities</code> 取 <code>topResumedActivity</code></td>
-</tr>
-<tr>
-<td>读属性</td>
-<td><code>属性 ro.product.model</code> <code>getprop ro.xxx</code></td>
-<td><code>getprop key</code></td>
-</tr>
-<tr>
-<td>截图</td>
-<td>任何含「截图/截屏/screenshot」</td>
-<td><code>screencap -p /sdcard/qphone-&lt;ts&gt;.png</code></td>
-</tr>
-</tbody>
-</table>
-<h3>C.5 跳转（1 项）</h3>
-<table>
-<thead>
-<tr>
-<th>场景</th>
-<th>可用讲法</th>
-<th>执行命令</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>开网址</td>
-<td><code>打开 https://…</code></td>
-<td><code>am start -a ACTION_VIEW -d url</code></td>
-</tr>
-</tbody>
-</table>
-<h3>C.6 装应用快路径（v0.39）</h3>
-<p><code>下载安装 X 并打开</code> 唔用 L2 摸索：L0 查商店表 → <code>am start</code> 直落商店搜索 activity → ADBKeyBoard 落中文 → Enter；<code>_install_watcher()</code> 每 2 s 查包表，装咗即开 App、<code>pm grant</code> 通知、叫停模型（详见 §3.4.18）。</p>
-<h3>C.7 L0 唔覆盖嘅范围</h3>
-<table>
-<thead>
-<tr>
-<th>情况</th>
-<th>交边层</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>要睇界面才知点嘅（设置里点「网络和互联网」、列表第 3 项、滚动加载）</td>
-<td>L1a（无障碍树）</td>
-</tr>
-<tr>
-<td>WebView 内点点</td>
-<td>L1b（CDP 直接 JS）</td>
-</tr>
-<tr>
-<td>中文自由文字输入到指定输入框（无 ADBKeyBoard 时）</td>
-<td>L2 / 待接 IME</td>
-</tr>
-<tr>
-<td>跨多步复合任务、登录/验证码/付款</td>
-<td>L2（人肉步骤由接管卡交人）</td>
 </tr>
 </tbody>
 </table></section>
