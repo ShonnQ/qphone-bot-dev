@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone Bot 详细设计 v0.47</title>
+<title>QPhone Bot 详细设计 v0.48</title>
 <style>/* ============================================================================
    ShonnQ Corp · 默认视觉主题（科技简约 · 暗底星空）
    v1.0 · 2026-10-27 · 正本
@@ -236,7 +236,7 @@ a:hover{border-bottom-color:var(--acc)}
 <header class="hero">
   <div class="kicker">ShonnQ Corp · 详细设计</div>
   <h1>QPhone Bot 详细设计</h1>
-  <div class="docmeta"><span>版本：v0.47</span>
+  <div class="docmeta"><span>版本：v0.48</span>
   <span>日期：2026-10-27</span>
   <span>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></span></div>
 </header>
@@ -457,7 +457,36 @@ a:hover{border-bottom-color:var(--acc)}
 </table>
 <p>L1a 还有两个现实约束：① a11y 树用的是<strong>设备语言</strong>（本机是 en-US），中文要靠内置的 <code>I18N</code> 映射（网络和互联网 → Network &amp; internet），映射不到就是未命中，不做硬猜；② 只命中 <code>visibleToUser</code> 且不属于系统栏的节点，滚动区里尚未展开的条目找不到。</p>
 <h3>2.2 一句话进来之后</h3>
-<p>一句话进来，先分类，再决定走向。分类由 <code>classify()</code> 完成，判完只有三种去向：</p>
+<p>一句话进来，先分类，再定意图，最后交给固定的原语执行。</p>
+<p><strong>先把三样东西分开</strong>，这是整章的前提：</p>
+<table>
+<thead>
+<tr>
+<th>东西</th>
+<th>性质</th>
+<th>会不会随说法增长</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>原语表</strong>（§2.8.1）</td>
+<td>固定的能力集合：开 App、装、卸载、改设置、点、滑、输入、截图……</td>
+<td><strong>不增长</strong>。是能力，不是句式</td>
+</tr>
+<tr>
+<td><strong>讲法理解</strong></td>
+<td>模型把一句话译成「意图 + 槽位」，意图必须落在原语表内</td>
+<td>增长在模型侧，代码不动</td>
+</tr>
+<tr>
+<td><strong>数据</strong></td>
+<td>别名（中文名 → 包名）、句级缓存</td>
+<td>可无限增长，<strong>不改代码</strong></td>
+</tr>
+</tbody>
+</table>
+<p>一条新说法进来，缺的只可能是「理解」或「数据」，不应该是「新规则」。<strong>不许为一句新说法往代码里加正则或别名分支。</strong></p>
+<p>分类只有三种去向：</p>
 <table>
 <thead>
 <tr>
@@ -471,8 +500,8 @@ a:hover{border-bottom-color:var(--acc)}
 <td>直接回话，不碰云机</td>
 </tr>
 <tr>
-<td>任务（开关 App、查状态、点滑输入、装应用、改设置等）</td>
-<td>进路由，按 L0 → L1a → L1b → L2 依次尝试</td>
+<td>任务</td>
+<td>进意图层，取「意图 + 槽位」，再交原语执行</td>
 </tr>
 <tr>
 <td>判不清</td>
@@ -484,11 +513,16 @@ a:hover{border-bottom-color:var(--acc)}
 <ol>
 <li>收到交代，先确认云机可以操作。不行就回报当前状态和失败原因，结束。</li>
 <li>判断是聊天还是任务。</li>
-<li>任务的句子进入路由。四层的规则都没命中时，才走一次 S 层（语义解析），拿到「意图 + 槽位」再派回去。</li>
-<li>按意图交给对应的层执行，执行过程逐步回报进度。</li>
-<li>做不下去就发「要人」信号，人可以到云机一侧接手；接手之后可以继续跑。</li>
-<li>收到关机交代就关掉这一部云机，并回报状态。</li>
+<li>任务的句子先取<strong>意图 + 槽位</strong>。这句话以前见过（句级缓存命中）或别名已学到，就走零模型快路；否则问一次模型（§2.8）。</li>
+<li>意图必须在<strong>固定原语表</strong>内。不在表内，且没有可用的视觉兜底，就直接回报「这件事我做不了」，不猜、不硬套。</li>
+<li>按原语执行：纯命令类原语走 L0（零模型），需要看界面的原语按 §2.3 的表降级到 L1a / L1b / L2。执行过程逐步回报进度。</li>
+<li>失败分两类：<strong>技术失败</strong>（解析不到、命令报错）直接收工并说清原因；<strong>人肉步骤</strong>（登录、验证码、付款）才发「要人」信号，人接手后可以续跑。收到关机交代就关掉这一部云机，并回报状态。</li>
 </ol>
+<p><strong>两条硬规矩</strong>：</p>
+<ul>
+<li><strong>槽位不合理时不许当结论</strong>：集合、多目标、指代不明（「所有第三方应用」「呢几个」「佢」）一律交回意图层重判或交视觉兜底，<strong>不许</strong>用一条正则猜出名字就 <code>final</code> 收工。</li>
+<li><strong>原语表之外的请求就是做不了</strong>，明说做不了，而不是靠新增规则去凑。</li>
+</ul>
 <p>来回只有五种信息，字段名见下表：</p>
 <table>
 <thead>
@@ -734,37 +768,33 @@ a:hover{border-bottom-color:var(--acc)}
 </table>
 <p>推论（用于排查）：四条通道彼此独立——<code>snapshothelper</code> 挂掉只会让 L1a 失效；WebView socket 不存在（App 没有开调试）只会让 L1b 失效；Portal 挂掉只会让 L2 失效；L0 依赖 adbd，即使前三条全部挂掉也不受影响。</p>
 <h4>路由与降级规则</h4>
+<p>起点由<strong>原语</strong>决定，不由句式决定。同一个原语在不同界面上可以走不同层：</p>
 <table>
 <thead>
 <tr>
-<th>交代类型</th>
+<th>原语类型</th>
 <th>起点</th>
 <th>升级条件</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>已在 L0 能力表内（开关 App、改设置、装包、按键、截图）</td>
+<td>纯命令类（开关 App、装、卸、改设置、按键、截图、查包）</td>
 <td>L0</td>
 <td>命令失败或前台 Activity 不符 → L1a</td>
 </tr>
 <tr>
-<td>原生控件界面（设置、系统 App、多数工具类）</td>
+<td>需要认控件（点某个按钮、读某段文字）</td>
 <td>L1a</td>
-<td>快照找不到目标节点，或两轮仍未达成 → L1b（若为 WebView）或 L2</td>
+<td>快照找不到目标节点，两轮仍未达成 → L2</td>
 </tr>
 <tr>
-<td>WebView 且我方可控</td>
+<td>目标是网页内容且我方可控</td>
 <td>L1b</td>
-<td>CDP 无 socket / 找不到选择器 → L2</td>
+<td>无 socket / 找不到选择器 → L2</td>
 </tr>
 <tr>
-<td>WebView 但第三方 App</td>
-<td>L1a 读外壳 + IME 输入</td>
-<td>正文类富文本 → L2</td>
-</tr>
-<tr>
-<td>游戏、自绘、Canvas</td>
+<td>需要理解画面（游戏、自绘、Canvas、富文本）</td>
 <td>L2</td>
 <td>—</td>
 </tr>
@@ -909,81 +939,135 @@ a:hover{border-bottom-color:var(--acc)}
 </table>
 <h3>2.7 L2 视觉兜底</h3>
 <p>Mobilerun 的做法是截图加多模态模型找控件，输出 <code>click{index}</code> / <code>type</code> / <code>swipe</code> 等动作。它<strong>只做兜底</strong>：L0 和 L1 都不认识界面时才使用，步数上限是 20。</p>
-<h3>2.8 语义路由层（S 层）</h3>
-<p><strong>一句话概括</strong>：先跑规则（命中时不动用模型，也没有额外延迟）；<strong>三层规则全部未命中，才问模型一次</strong>，只取「意图 + 槽位」，再按路由表派发到 L0 / L1a / L1b。L1a 和 L1b 同样接收语义结果，不只是 L0。</p>
-<pre><code>L0 规则 → L1a 规则 → L1b 规则 ──全 miss──→ S 层（一次 LLM，只出 JSON）
-                                            ├ intent ∈ L0 能力 → L0 执行器
-                                            ├ tap              → L1b（有 socket）→ L1a
-                                            └ input / search   → L1b（IME 未做）
+<h3>2.8 意图层（S 层）</h3>
+<p><strong>一句话概括</strong>：S 层是<strong>唯一理解入口</strong>，不是「规则都失败之后的兜底」。它把一句话译成「意图 + 槽位」，意图必须落在 §2.8.1 的固定原语表内，再按原语执行。正则退化成<strong>句级缓存快路</strong>：同一句话说过、或别名已学到，才零模型直通；其余一律先问模型。</p>
+<pre><code>一句话 ──句级缓存 / 已学别名命中──→ 原语（零模型）
+      └──未命中──→ S 层（一次 LLM，只出 JSON）──意图必须在原语表内──→ 原语
+                                                          └──不在表内──→ 反问或 L2 视觉兜底
 </code></pre>
-<p><strong>契约</strong>（模型唯一输出）：<code>{"intent":"…","app":"","target":"","text":"","confidence":0.0}</code><br>
-意图白名单：<code>open_app / check_installed / uninstall / force_stop / clear_data / back / home / screenshot / tap / input / search / scroll / unknown</code>。</p>
-<table>
-<thead>
-<tr>
-<th>intent 类</th>
-<th>派去</th>
-<th>命令由哪个拼装</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>open_app</code> <code>check_installed</code> <code>uninstall</code> <code>force_stop</code> <code>clear_data</code> <code>back</code> <code>home</code> <code>screenshot</code></td>
-<td><strong>L0</strong></td>
-<td>拼装一句规范说法交给 <code>l0_try()</code>（<code>uninstall+淘宝</code> → <code>卸载淘宝</code>），包名解析、断言和 <code>final</code> 全部复用 L0，不另外写一套</td>
-</tr>
-<tr>
-<td><code>tap</code></td>
-<td><strong>L1b</strong> 优先（41–56 ms）→ 不成功再转 <strong>L1a</strong></td>
-<td><code>agent-device snapshot</code> → <code>input tap</code></td>
-</tr>
-<tr>
-<td><code>input</code> <code>search</code></td>
-<td><strong>L1b</strong>（IME 未做，没有 socket 就走 L2）</td>
-<td>CDP <code>Input.insertText</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>硬约束</strong>：模型不许输出 shell 或 adb 字符串；包名一律由本地 <code>resolve_package()</code> 校验；intent 不在白名单里就直接走 L2。</p>
-<p><strong>校验与降级</strong>：JSON 解析失败重试 1 次；<code>confidence &lt; 0.6</code>、不在白名单、超时，都落到 L2，不赌。</p>
-<p><strong>模型与兜底（老板 2026-10-27 拍板）</strong></p>
+<p><strong>这么改的理由</strong>（2026-10-29 实测教训）：规则链先行的写法，隐含假设是「规则命中 = 理解正确」。实际上正则命中的只是句式模板——「卸载云机上所有三方应用」被 L0 当成「卸载一个叫『云机上所有三方』的 app」，查不到包名就 <code>final</code> 收工，语义层连机会都没有。<strong>兜底只在「完全不命中」时生效，在「命中但理解错」时反而帮倒忙。</strong></p>
+<p><strong>契约</strong>（模型唯一输出）：<code>{"intent":"…","app":"","target":"","text":"","scope":"","confidence":0.0}</code></p>
+<p><code>intent</code> 必须来自 §2.8.1 的原语表；<code>scope</code> 只用于集合型原语（<code>one</code> / <code>third_party</code> / <code>all_user</code>）。</p>
+<p><strong>硬约束</strong>：</p>
 <ul>
-<li>主力是 <strong><code>traework/DeepSeek-V4-Pro-Official</code></strong>，超时 8 s；超时或调用不通时自动降级到 <strong><code>DeepSeek-V4-Flash-Official</code></strong>（2.2–2.6 s）补一次；两个都不行才走 L2</li>
-<li>按句缓存 24 h（<code>~/.qphone/sem-cache.json</code>，最多 200 句）；危险 intent 不做二次确认，靠日志追溯</li>
-<li>别名自愈：语义命中并且执行成功之后，写入 <code>~/.qphone/alias-learned.json</code> 并立即加入 <code>APP_ALIASES</code>，下次同样的说法由规则直接命中（不动用模型）</li>
+<li>模型不许输出 shell 或 adb 字符串；命令一律由本地模板拼装</li>
+<li>包名一律由本地 <code>resolve_package()</code> 校验，解析不到就当意图未达成，不许盲跑</li>
+<li><code>confidence &lt; 0.6</code>、不在原语表、JSON 解不出（重试一次仍失败）、超时 —— 一律不赌，交反问或 L2</li>
+<li>槽位不合理（集合、多目标、指代不明）不许 <code>final</code> 收工，必须重判或交视觉兜底</li>
+<li>失败原因要保留<strong>真实原因</strong>：缓存命中不能覆盖失败原因（<code>SEM_LAST.why</code> 只写「命中句级缓存」会把「包名解析不到」盖掉，排查时会误判）</li>
 </ul>
+<p><strong>模型与兜底</strong></p>
+<ul>
+<li>主力 <strong><code>traework/DeepSeek-V4-Pro-Official</code></strong>，超时 8 s；降级 <strong><code>DeepSeek-V4-Flash-Official</code></strong>（2.2–2.6 s）；两个都不行才交 L2</li>
+<li>句级缓存 24 h（<code>~/.qphone/sem-cache.json</code>，最多 200 句）；<strong>缓存的是理解结果，不是跳过理解</strong></li>
+<li>别名自愈：原语执行成功后，把「中文名 → 包名」写进 <code>~/.qphone/alias-learned.json</code> 并立即并入别名表；失败不写，所以缺词会每次重问一次模型</li>
+</ul>
+<h4>2.8.1 原语表（固定，不随说法增长）</h4>
 <table>
 <thead>
 <tr>
-<th>模型</th>
-<th>6 句解析耗时</th>
-<th>判定</th>
+<th>原语</th>
+<th>槽位</th>
+<th>执行</th>
+<th>说明</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>DeepSeek-V4-Pro-Official</code>（主力）</td>
-<td>2.1 / 4.4 / 4.4 / 4.7 / 5.5 / <strong>27.0</strong> s</td>
-<td>准确但慢（复杂句的 reasoning 有 400–800 token）；<code>reasoning_effort=minimal</code> 时 12.3 s、<code>enable_thinking:false</code> 时 10.3 s，依然慢 → 必须有 Flash 兜底</td>
+<td><code>app.open</code></td>
+<td><code>app</code></td>
+<td>L0</td>
+<td>开 App</td>
 </tr>
 <tr>
-<td><code>DeepSeek-V4-Flash-Official</code>（兜底）</td>
-<td>2.2 / 2.5 / 2.6 s</td>
-<td>稳定，3/3 正确</td>
+<td><code>app.install</code></td>
+<td><code>app</code></td>
+<td>L0（商店快路，§2.4）</td>
+<td>装 App</td>
 </tr>
 <tr>
-<td><code>mimo-v2.6-flash</code></td>
-<td>1.6 / 2.1 / 3.6 s</td>
-<td>备选</td>
+<td><code>app.uninstall</code></td>
+<td><code>app</code> 或 <code>scope</code></td>
+<td>L0</td>
+<td><strong>集合是槽位取值，不是新句式</strong>：<code>scope=third_party</code> 即「卸载所有第三方应用」</td>
 </tr>
 <tr>
-<td><code>glm-5.3-flash</code> / <code>qoder/qwen3.8-flash</code></td>
-<td>3.9–6.1 s / 超时 ×3</td>
-<td>不使用</td>
+<td><code>app.stop</code></td>
+<td><code>app</code> 或 <code>scope</code></td>
+<td>L0</td>
+<td>强制停止</td>
+</tr>
+<tr>
+<td><code>app.clear</code></td>
+<td><code>app</code></td>
+<td>L0</td>
+<td>清数据</td>
+</tr>
+<tr>
+<td><code>app.query</code></td>
+<td><code>app</code> 或 <code>scope</code></td>
+<td>L0</td>
+<td>有冇装 / 列第三方</td>
+</tr>
+<tr>
+<td><code>device.set</code></td>
+<td><code>key</code>, <code>value</code></td>
+<td>L0</td>
+<td>亮度、音量、Wi-Fi、蓝牙、旋转、飞行模式</td>
+</tr>
+<tr>
+<td><code>device.key</code></td>
+<td><code>key</code></td>
+<td>L0</td>
+<td>back / home / enter / 音量键</td>
+</tr>
+<tr>
+<td><code>screen.capture</code></td>
+<td>—</td>
+<td>L0</td>
+<td>截图</td>
+</tr>
+<tr>
+<td><code>ui.tap</code></td>
+<td><code>target</code> 或 <code>xy</code></td>
+<td>L1b → L1a → L2</td>
+<td>点控件 / 点坐标</td>
+</tr>
+<tr>
+<td><code>ui.swipe</code></td>
+<td><code>from</code>, <code>to</code></td>
+<td>L1a → L2</td>
+<td>滑动</td>
+</tr>
+<tr>
+<td><code>ui.type</code></td>
+<td><code>text</code>, <code>target</code></td>
+<td>L1b → L1a（ADBKeyBoard）</td>
+<td>输入文字</td>
+</tr>
+<tr>
+<td><code>ui.find_text</code></td>
+<td><code>text</code></td>
+<td>L1a</td>
+<td>读界面上有冇这段字</td>
+</tr>
+<tr>
+<td><code>web.eval</code></td>
+<td>片段名</td>
+<td>L1b</td>
+<td>只准白名单片段，不接受任意 JS</td>
+</tr>
+<tr>
+<td><code>task.freeform</code></td>
+<td><code>goal</code></td>
+<td>L2</td>
+<td>视觉 agent 兜底，唯一由模型现场规划的原语</td>
 </tr>
 </tbody>
 </table>
-<p><strong>实测（真跑）</strong></p>
+<p><strong>这张表只增原语，不增句式。</strong> 判断标准：如果新需求是「同一件事换了一种讲法」，那属于<strong>理解</strong>，交给模型；如果是「系统真的还不会做某类事」，才加一条原语，并且要在评审里写清为什么现有原语组合做不到。</p>
+<p>⚠️ <strong>集合类操作要排除我方组件</strong>：<code>app.uninstall(scope=third_party)</code> 的候选必须剔除 <code>com.mobilerun.portal</code>（L2 的手）、<code>com.callstack.agentdevice.snapshothelper</code>（L1a 的手）、<code>com.android.adbkeyboard</code> / <code>com.callstack.agentdevice.imehelper</code>（中文输入）。否则一条「卸载所有第三方应用」会把云机的执行能力自己卸掉。</p>
+<h4>2.8.2 实测、开关与自查</h4>
 <table>
 <thead>
 <tr>
@@ -993,12 +1077,12 @@ a:hover{border-bottom-color:var(--acc)}
 </thead>
 <tbody>
 <tr>
-<td><code>将淘宝卸咗佢</code>（三层全部未命中）</td>
-<td>三层 skip → Pro 3.9 s → <code>uninstall 淘宝</code> → <strong>L0 55 ms</strong>「未安装」；步骤日志标签 <code>语义→L0</code></td>
+<td><code>将淘宝卸咗佢</code>（三层规则全未命中）</td>
+<td>Pro 3.9 s → 意图 <code>uninstall 淘宝</code> → <strong>L0 55 ms</strong>「未安装」；步骤日志标签 <code>语义→L0</code></td>
 </tr>
 <tr>
 <td>同一句话再说一次</td>
-<td><strong>65 ms</strong>（缓存命中，不动用模型）</td>
+<td><strong>65 ms</strong>（句级缓存命中，不动用模型）</td>
 </tr>
 <tr>
 <td><code>帮我睇下百度网盘装咗未</code></td>
@@ -1008,10 +1092,35 @@ a:hover{border-bottom-color:var(--acc)}
 <td><code>揿一下『网络和互联网』</code></td>
 <td><code>tap</code> → L1b 没有文字 → L1a 报「无障碍树冇呢个控件」，如实未命中</td>
 </tr>
+<tr>
+<td><code>打开喜马拉雅</code>（2026-10-29）</td>
+<td>意图 <code>open_app + 喜马拉雅</code>、置信 0.98，但本地别名表没有这个词 → <code>resolve_package()</code> 返空 → 交 L2，白跑 3 步。<strong>根因是别名数据缺词，不是理解失败</strong></td>
+</tr>
 </tbody>
 </table>
-<p><strong>开关与自查</strong>：<code>QPHONE_SEM=0</code> 可以整体关闭；<code>QPHONE_SEM_MODEL</code>、<code>QPHONE_SEM_FALLBACK</code>、<code>QPHONE_SEM_TIMEOUT</code> 可以调整；<code>GET /layers</code> 会返回 <code>semantic</code> 字段（包含模型、超时、缓存、统计和上一次解析结果）。</p>
-<p><strong>本版不做</strong>：多步任务拆解（仍然落到 <code>unknown</code> 再进 L2）、<code>scroll</code> 执行器、中文 IME 输入。</p>
+<table>
+<thead>
+<tr>
+<th>开关</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>QPHONE_SEM=0</code></td>
+<td>整体关闭意图层（退回纯规则）</td>
+</tr>
+<tr>
+<td><code>QPHONE_SEM_MODEL</code> / <code>QPHONE_SEM_FALLBACK</code> / <code>QPHONE_SEM_TIMEOUT</code></td>
+<td>换模型、换兜底、调超时</td>
+</tr>
+<tr>
+<td><code>GET /layers</code></td>
+<td>返回 <code>semantic</code> 段：模型、超时、缓存、统计、上一次解析结果</td>
+</tr>
+</tbody>
+</table>
+<p><strong>本版不做</strong>：多步任务拆解（仍落 <code>unknown</code> 再进 L2）、<code>scroll</code> 执行器、中文 IME 输入。</p>
 <h3>2.9 事件契约与步骤日志</h3>
 <h4>事件契约（<code>/turn</code> SSE）</h4>
 <pre><code class="language-json">event: layer
@@ -1076,6 +1185,11 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.48</td>
+<td>架构改向：S 层由「规则失败后的兜底」升为<strong>唯一理解入口</strong>，原语表固定、正则降为句级缓存快路；§2.2 重写处理顺序并加「槽位不合理不许 final」；§2.3 路由起点按原语而非句式；§2.8 新增原语表与集合操作排除我方组件</td>
+<td>10-29</td>
+</tr>
 <tr>
 <td>v0.47</td>
 <td>生成器 <code>lang</code> 由 <code>zh-Hant</code> 改 <code>zh-Hans</code>，修正句号按繁体规范画在字框中央的问题</td>
