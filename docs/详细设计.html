@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone Bot 详细设计 v0.48</title>
+<title>QPhone Bot 详细设计 v0.49</title>
 <style>/* ============================================================================
    ShonnQ Corp · 默认视觉主题（科技简约 · 暗底星空）
    v1.0 · 2026-10-27 · 正本
@@ -236,7 +236,7 @@ a:hover{border-bottom-color:var(--acc)}
 <header class="hero">
   <div class="kicker">ShonnQ Corp · 详细设计</div>
   <h1>QPhone Bot 详细设计</h1>
-  <div class="docmeta"><span>版本：v0.48</span>
+  <div class="docmeta"><span>版本：v0.49</span>
   <span>日期：2026-10-27</span>
   <span>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></span></div>
 </header>
@@ -486,35 +486,45 @@ a:hover{border-bottom-color:var(--acc)}
 </tbody>
 </table>
 <p>一条新说法进来，缺的只可能是「理解」或「数据」，不应该是「新规则」。<strong>不许为一句新说法往代码里加正则或别名分支。</strong></p>
-<p>分类只有三种去向：</p>
+<p><strong>分闲聊和任务，只有一处理解点：S 层。</strong></p>
+<p>词表（<code>classify()</code>）只做<strong>预筛</strong>，不做判据——它只能认出「这肯定不是任务」（纯问候、纯表情、极短寒暄），认不出「这是什么任务」。其余一律交 S 层，由模型输出意图。</p>
 <table>
 <thead>
 <tr>
-<th>判出来是什么</th>
-<th>走向</th>
+<th>步骤</th>
+<th>做什么</th>
+<th>是否调模型</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>闲聊、提问、表达情绪</td>
-<td>直接回话，不碰云机</td>
+<td>1. 预筛</td>
+<td>纯问候、纯表情、极短寒暄 → 直接回</td>
+<td>零模型</td>
 </tr>
 <tr>
-<td>任务</td>
-<td>进意图层，取「意图 + 槽位」，再交原语执行</td>
+<td>2. 其余全部交 S 层</td>
+<td>输出 <code>intent ∈ {chat, ask, task.&lt;原语&gt;}</code></td>
+<td>句级缓存命中则零模型，否则问一次</td>
 </tr>
 <tr>
-<td>判不清</td>
-<td>反问一句，不猜</td>
+<td>3. 分流</td>
+<td><code>chat</code> 直接答；<code>ask</code> 作答（可查包表）；<code>task.*</code> 交原语执行</td>
+<td>只有 <code>task.*</code> 才碰云机</td>
+</tr>
+<tr>
+<td>4. 不确定</td>
+<td>置信低、意图冲突 → 反问一句，不猜</td>
+<td>—</td>
 </tr>
 </tbody>
 </table>
 <p>处理顺序固定为六步：</p>
 <ol>
 <li>收到交代，先确认云机可以操作。不行就回报当前状态和失败原因，结束。</li>
-<li>判断是聊天还是任务。</li>
-<li>任务的句子先取<strong>意图 + 槽位</strong>。这句话以前见过（句级缓存命中）或别名已学到，就走零模型快路；否则问一次模型（§2.8）。</li>
-<li>意图必须在<strong>固定原语表</strong>内。不在表内，且没有可用的视觉兜底，就直接回报「这件事我做不了」，不猜、不硬套。</li>
+<li>预筛：明显是寒暄的直接回。其余交 S 层取<strong>意图 + 槽位</strong>（§2.8）。</li>
+<li><code>intent=chat</code> 直接答；<code>intent=ask</code> 作答（例如查包表）；<code>intent=task.*</code> 才进下一步。</li>
+<li>动作意图必须在<strong>固定原语表</strong>内。不在表内，且没有可用的视觉兜底，就直接回报「这件事我做不了」，不猜、不硬套。</li>
 <li>按原语执行：纯命令类原语走 L0（零模型），需要看界面的原语按 §2.3 的表降级到 L1a / L1b / L2。执行过程逐步回报进度。</li>
 <li>失败分两类：<strong>技术失败</strong>（解析不到、命令报错）直接收工并说清原因；<strong>人肉步骤</strong>（登录、验证码、付款）才发「要人」信号，人接手后可以续跑。收到关机交代就关掉这一部云机，并回报状态。</li>
 </ol>
@@ -947,7 +957,30 @@ a:hover{border-bottom-color:var(--acc)}
 </code></pre>
 <p><strong>这么改的理由</strong>（2026-10-29 实测教训）：规则链先行的写法，隐含假设是「规则命中 = 理解正确」。实际上正则命中的只是句式模板——「卸载云机上所有三方应用」被 L0 当成「卸载一个叫『云机上所有三方』的 app」，查不到包名就 <code>final</code> 收工，语义层连机会都没有。<strong>兜底只在「完全不命中」时生效，在「命中但理解错」时反而帮倒忙。</strong></p>
 <p><strong>契约</strong>（模型唯一输出）：<code>{"intent":"…","app":"","target":"","text":"","scope":"","confidence":0.0}</code></p>
-<p><code>intent</code> 必须来自 §2.8.1 的原语表；<code>scope</code> 只用于集合型原语（<code>one</code> / <code>third_party</code> / <code>all_user</code>）。</p>
+<p><code>intent</code> 分两类：</p>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>取值</th>
+<th>去处</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>非执行意图</strong></td>
+<td><code>chat</code>（闲聊、表达情绪）、<code>ask</code>（提问、查询，可带 <code>app</code> 走包表作答）</td>
+<td>不进原语表，直接答</td>
+</tr>
+<tr>
+<td><strong>执行意图</strong></td>
+<td>§2.8.1 原语表里的原语名</td>
+<td>交原语执行</td>
+</tr>
+</tbody>
+</table>
+<p><code>scope</code> 只用于集合型原语（<code>one</code> / <code>third_party</code> / <code>all_user</code>）。</p>
+<p><strong>为什么分类也归 S 层</strong>：词表判「闲聊还是任务」跟正则判「卸载哪句」是同一类毛病——都是拿模板当理解。实测已经有反例：<code>将淘宝卸咗佢</code> 当初被词表判成「判不清」，连任务都开不了。所以词表只留作预筛，判据统一由 S 层出。</p>
 <p><strong>硬约束</strong>：</p>
 <ul>
 <li>模型不许输出 shell 或 adb 字符串；命令一律由本地模板拼装</li>
@@ -1185,6 +1218,11 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.49</td>
+<td>分类并入 S 层：<code>classify()</code> 降为预筛（只认「肯定不是任务」），intent 白名单区分<strong>非执行意图</strong> <code>chat</code>/<code>ask</code> 与<strong>执行意图</strong>（原语表）；§2.2 六步顺序同步</td>
+<td>10-29</td>
+</tr>
 <tr>
 <td>v0.48</td>
 <td>架构改向：S 层由「规则失败后的兜底」升为<strong>唯一理解入口</strong>，原语表固定、正则降为句级缓存快路；§2.2 重写处理顺序并加「槽位不合理不许 final」；§2.3 路由起点按原语而非句式；§2.8 新增原语表与集合操作排除我方组件</td>
