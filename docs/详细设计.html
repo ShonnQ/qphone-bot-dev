@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone Bot 详细设计 v0.44</title>
+<title>QPhone Bot 详细设计 v0.45</title>
 <style>/* ============================================================================
    ShonnQ Corp · 默认视觉主题（科技简约 · 暗底星空）
    v1.0 · 2026-10-27 · 正本
@@ -236,7 +236,7 @@ a:hover{border-bottom-color:var(--acc)}
 <header class="hero">
   <div class="kicker">ShonnQ Corp · 详细设计</div>
   <h1>QPhone Bot 详细设计</h1>
-  <div class="docmeta"><span>版本：v0.44</span>
+  <div class="docmeta"><span>版本：v0.45</span>
   <span>日期：2026-10-27</span>
   <span>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></span></div>
 </header>
@@ -281,6 +281,11 @@ a:hover{border-bottom-color:var(--acc)}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.45</td>
+<td>§1.4 三块（表＋树＋外部组件表）合并成一块：一张结构树含仓库内外依赖，删两张表</td>
+<td>10-29</td>
+</tr>
 <tr>
 <td>v0.44</td>
 <td>§1.4 补程序结构图（三个 py 收进「控制程序模块」）与外部组件表；新增附录 D 同类项目摸底</td>
@@ -343,138 +348,32 @@ a:hover{border-bottom-color:var(--acc)}
 </tbody>
 </table>
 <h3>1.4 程序结构说明</h3>
-<p>源码在 <code>~/projects/qphone-bot-dev</code>。控制程序由下列部分组成，各部分的职责和调用方如下：</p>
-<table>
-<thead>
-<tr>
-<th>程序</th>
-<th>是什么</th>
-<th>跑在哪里</th>
-<th>谁调用它</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>浏览器界面</td>
-<td>暂时代替壳的对话页（<code>shell.html</code>）</td>
-<td>Mac 浏览器，打开 <code>127.0.0.1:8777</code></td>
-<td>人</td>
-</tr>
-<tr>
-<td><code>serve.py</code></td>
-<td>控制程序主进程：收一句话、判断是聊天还是任务、分派到四层、调模型、回结果、存步骤日志与层用量</td>
-<td>Mac 本机</td>
-<td>浏览器界面，或任何能发 <code>POST /turn</code> 的客户端</td>
-</tr>
-<tr>
-<td><code>layers.py</code></td>
-<td>执行层库：L0 确定性命令、L1a 无障碍树、L1b WebView CDP、L2 视觉兜底</td>
-<td>被 <code>serve.py</code> 直接 import，不单独跑</td>
-<td><code>serve.py</code></td>
-</tr>
-<tr>
-<td><code>qphone.py</code></td>
-<td>容器起停、开机状态、端口发现、装包、截图</td>
-<td>Mac 本机命令行</td>
-<td><code>serve.py</code> 和运维脚本</td>
-</tr>
-<tr>
-<td>Mobilerun</td>
-<td>L2 的视觉 agent 框架（MIT，0.7.0）</td>
-<td>Mac 本机独立环境（<code>uv tool install</code>）</td>
-<td><code>serve.py</code> 在四层都未命中时调用</td>
-</tr>
-<tr>
-<td><code>agent-device</code></td>
-<td>取无障碍树快照、按坐标点击（MIT，0.21.31）</td>
-<td>Mac 本机命令行</td>
-<td><code>layers.py</code> 在 L1a 阶段调用</td>
-</tr>
-<tr>
-<td>Portal APK</td>
-<td>云机上的无障碍与点击服务（<code>com.mobilerun.portal</code> 0.7.28）</td>
-<td>云机内</td>
-<td>Mobilerun（L2）</td>
-</tr>
-<tr>
-<td>snapshothelper APK</td>
-<td>云机侧的无障碍快照辅助（<code>com.callstack.agentdevice.snapshothelper</code>）</td>
-<td>云机内</td>
-<td><code>agent-device</code>（L1a）</td>
-</tr>
-<tr>
-<td>ADBKeyBoard APK</td>
-<td>中文输入法，用广播把 unicode 文字送进输入框（<code>com.android.adbkeyboard</code>）</td>
-<td>云机内</td>
-<td><code>layers.py</code> 的 <code>input_text()</code></td>
-</tr>
-</tbody>
-</table>
-<p>上面那张表回答「谁负责什么」，下面这张图回答「这些东西在仓库里怎么摆」：</p>
-<pre><code>控制程序模块（~/projects/qphone-bot-dev）
-├── serve.py          主进程 · 127.0.0.1:8777
-│   ├── 接口      POST /turn（SSE）、GET /state /history /layers /health /status
-│   ├── 分流      classify()（聊天 or 任务）、query_answer()（查询先给结论）
-│   ├── 派发      run_agent() → _exec_l2()（四层）
-│   ├── 装应用    settle_before_l2()、prep_l2_prompt()、_install_watcher()、post_task_touch()
-│   ├── 记录      _log_row()（步骤日志）、layer_bump()（层用量）、hist_add()
-│   └── 模型      llm_route()、answer_chat()、llm_key()
-├── layers.py         执行层库（被 serve.py import）
-│   ├── 地基      adb()、sh()、trace()、fg_package()、installed()、third_party()
-│   ├── L0        l0_try()、resolve_package()、install_target()、open_store_search()、input_text()
-│   ├── L1a       snapshot()、find_node()、node_center()、l1a_try()
-│   ├── L1b       webview_sockets()、cdp_targets()、cdp_eval()、l1b_try()
-│   ├── 路由      route() / _route_once()
-│   └── S 层      sem_try()、sem_parse()、sem_execute()、_learn_alias()
-├── qphone.py         容器起停、端口发现、装包、截图（不做决策）
-├── shell.html        浏览器界面（暂代壳）：对话、进度、步骤日志、层用量
-├── scripts/          redroid-up.sh（云机起停）、new-ticket.sh（单号分配）
-├── tickets/          产品单账本（FR / PR）
-├── trajectories/     Mobilerun 每单轨迹（每步截图、思考、动作）
-└── docs/             详细设计、落地目标清单、里程碑、主题
+<p>源码在 <code>~/projects/qphone-bot-dev</code>。分工只有三条界线：<code>serve.py</code> 是唯一对外入口，<code>layers.py</code> 只被 <code>serve.py</code> import、不单独跑，<code>qphone.py</code> 只做容器与设备运维、不做决策也不调模型。</p>
+<pre><code>控制程序（~/projects/qphone-bot-dev）
+├── 仓库内
+│   ├── serve.py      主进程 · 127.0.0.1:8777
+│   │   ├── 接口    POST /turn（SSE）、GET /state /history /layers
+│   │   ├── 分流    classify()、query_answer()
+│   │   ├── 派发    run_agent() → _exec_l2()
+│   │   ├── 记账    _log_row()、layer_bump()
+│   │   └── 模型    llm_route()、answer_chat()
+│   ├── layers.py     执行层库（被 serve.py import）
+│   │   ├── 地基    adb()、trace()、fg_package()
+│   │   ├── L0      l0_try()、resolve_package()、open_store_search()、input_text()
+│   │   ├── L1a     snapshot()、find_node()、l1a_try()
+│   │   ├── L1b     cdp_eval()、l1b_try()
+│   │   ├── 路由    route()
+│   │   └── S 层    sem_try()
+│   ├── qphone.py     容器起停、端口发现、装包、截图
+│   ├── shell.html    浏览器界面（暂代壳）
+│   ├── scripts/      redroid-up.sh、new-ticket.sh
+│   ├── tickets/      FR / PR 账本
+│   ├── trajectories/ Mobilerun 轨迹
+│   └── docs/         详细设计、落地目标清单、里程碑
+└── 仓库外（运行时必须有）
+    ├── 本机  Mobilerun 0.7.0（L2）、agent-device 0.21.31（L1a）、adb 37.0.1
+    └── 云机  Portal 0.7.28（L2）、snapshothelper（L1a）、ADBKeyBoard（中文输入）
 </code></pre>
-<p>上面这张图里只有<strong>控制程序模块</strong>本身。下面这些组件不在仓库里，但运行时必须有：</p>
-<table>
-<thead>
-<tr>
-<th>组件</th>
-<th>装在哪</th>
-<th>谁用它</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Mobilerun 0.7.0</td>
-<td>Mac 本机 uv tool 环境</td>
-<td><code>serve.py</code>（L2）</td>
-</tr>
-<tr>
-<td>agent-device 0.21.31</td>
-<td>Mac 本机</td>
-<td><code>layers.py</code>（L1a）</td>
-</tr>
-<tr>
-<td>adb 37.0.1</td>
-<td>Mac 本机</td>
-<td><code>qphone.py</code> / <code>layers.py</code></td>
-</tr>
-<tr>
-<td>Portal APK 0.7.28</td>
-<td>云机</td>
-<td>Mobilerun（L2）</td>
-</tr>
-<tr>
-<td>snapshothelper APK</td>
-<td>云机</td>
-<td>agent-device（L1a）</td>
-</tr>
-<tr>
-<td>ADBKeyBoard APK</td>
-<td>云机</td>
-<td><code>layers.input_text()</code>（中文输入）</td>
-</tr>
-</tbody>
-</table>
 </section><section class="card"><h2>2. 系统详细设计</h2>
 <h3>2.1 控制程序是什么</h3>
 <p>控制程序是一个跑在 Mac 本机的 Python 服务，入口是 <code>serve.py</code>，默认监听 <code>127.0.0.1:8777</code>。它接收一句话，先判断这句话是要聊天还是要干活；要干活就分派给四层执行，执行过程逐条回报，最后给出结果。</p>

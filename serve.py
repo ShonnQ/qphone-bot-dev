@@ -956,6 +956,20 @@ def _flat_ui(d: Path, k: int) -> dict:
     return out
 
 
+_SCREEN: tuple[int, int] | None = None
+
+
+def screen_wh() -> tuple[int, int]:
+    """当前云机屏幕尺寸（缓存）。换机/换镜像后尺寸不同，不能写死。"""
+    global _SCREEN
+    if _SCREEN is None:
+        try:
+            _SCREEN = layers.screen_size()
+        except Exception:
+            _SCREEN = (720, 1280)
+    return _SCREEN
+
+
 def _bounds_box(b: str) -> tuple[float, float, float, float] | None:
     try:
         x1, y1, x2, y2 = [float(v) for v in b.split(",")]
@@ -963,7 +977,8 @@ def _bounds_box(b: str) -> tuple[float, float, float, float] | None:
         return None
     if x2 <= x1 or y2 <= y1:
         return None
-    return x1 / 720 * 100, y1 / 1600 * 100, (x2 - x1) / 720 * 100, (y2 - y1) / 1600 * 100
+    W, H = screen_wh()
+    return x1 / W * 100, y1 / H * 100, (x2 - x1) / W * 100, (y2 - y1) / H * 100
 
 
 def _label(el: dict) -> str:
@@ -1171,7 +1186,7 @@ def _encoder_loop():
         t0 = time.time()
         proc = subprocess.Popen(
             [ADB, "-s", TARGET, "shell", "screenrecord",
-             "--output-format=h264", "--size", "720x1280",
+             "--output-format=h264", "--size", f"{screen_wh()[0]}x{screen_wh()[1]}",
              "--bit-rate", "6000000", "--time-limit", "180", "-"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
         STREAM["proc"] = proc
