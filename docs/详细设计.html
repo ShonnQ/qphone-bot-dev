@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone Bot 详细设计 v0.43</title>
+<title>QPhone Bot 详细设计 v0.44</title>
 <style>/* ============================================================================
    ShonnQ Corp · 默认视觉主题（科技简约 · 暗底星空）
    v1.0 · 2026-10-27 · 正本
@@ -236,7 +236,7 @@ a:hover{border-bottom-color:var(--acc)}
 <header class="hero">
   <div class="kicker">ShonnQ Corp · 详细设计</div>
   <h1>QPhone Bot 详细设计</h1>
-  <div class="docmeta"><span>版本：v0.43</span>
+  <div class="docmeta"><span>版本：v0.44</span>
   <span>日期：2026-10-27</span>
   <span>依据：<code>~/目标/积累/软件工程/5.详细设计说明书.docx</code></span></div>
 </header>
@@ -281,6 +281,11 @@ a:hover{border-bottom-color:var(--acc)}
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>v0.44</td>
+<td>§1.4 补程序结构图（三个 py 收进「控制程序模块」）与外部组件表；新增附录 D 同类项目摸底</td>
+<td>10-28</td>
+</tr>
 <tr>
 <td>客户端</td>
 <td>未建，形态未定</td>
@@ -402,6 +407,71 @@ a:hover{border-bottom-color:var(--acc)}
 <td>中文输入法，用广播把 unicode 文字送进输入框（<code>com.android.adbkeyboard</code>）</td>
 <td>云机内</td>
 <td><code>layers.py</code> 的 <code>input_text()</code></td>
+</tr>
+</tbody>
+</table>
+<p>上面那张表回答「谁负责什么」，下面这张图回答「这些东西在仓库里怎么摆」：</p>
+<pre><code>控制程序模块（~/projects/qphone-bot-dev）
+├── serve.py          主进程 · 127.0.0.1:8777
+│   ├── 接口      POST /turn（SSE）、GET /state /history /layers /health /status
+│   ├── 分流      classify()（聊天 or 任务）、query_answer()（查询先给结论）
+│   ├── 派发      run_agent() → _exec_l2()（四层）
+│   ├── 装应用    settle_before_l2()、prep_l2_prompt()、_install_watcher()、post_task_touch()
+│   ├── 记录      _log_row()（步骤日志）、layer_bump()（层用量）、hist_add()
+│   └── 模型      llm_route()、answer_chat()、llm_key()
+├── layers.py         执行层库（被 serve.py import）
+│   ├── 地基      adb()、sh()、trace()、fg_package()、installed()、third_party()
+│   ├── L0        l0_try()、resolve_package()、install_target()、open_store_search()、input_text()
+│   ├── L1a       snapshot()、find_node()、node_center()、l1a_try()
+│   ├── L1b       webview_sockets()、cdp_targets()、cdp_eval()、l1b_try()
+│   ├── 路由      route() / _route_once()
+│   └── S 层      sem_try()、sem_parse()、sem_execute()、_learn_alias()
+├── qphone.py         容器起停、端口发现、装包、截图（不做决策）
+├── shell.html        浏览器界面（暂代壳）：对话、进度、步骤日志、层用量
+├── scripts/          redroid-up.sh（云机起停）、new-ticket.sh（单号分配）
+├── tickets/          产品单账本（FR / PR）
+├── trajectories/     Mobilerun 每单轨迹（每步截图、思考、动作）
+└── docs/             详细设计、落地目标清单、里程碑、主题
+</code></pre>
+<p>上面这张图里只有<strong>控制程序模块</strong>本身。下面这些组件不在仓库里，但运行时必须有：</p>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>装在哪</th>
+<th>谁用它</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mobilerun 0.7.0</td>
+<td>Mac 本机 uv tool 环境</td>
+<td><code>serve.py</code>（L2）</td>
+</tr>
+<tr>
+<td>agent-device 0.21.31</td>
+<td>Mac 本机</td>
+<td><code>layers.py</code>（L1a）</td>
+</tr>
+<tr>
+<td>adb 37.0.1</td>
+<td>Mac 本机</td>
+<td><code>qphone.py</code> / <code>layers.py</code></td>
+</tr>
+<tr>
+<td>Portal APK 0.7.28</td>
+<td>云机</td>
+<td>Mobilerun（L2）</td>
+</tr>
+<tr>
+<td>snapshothelper APK</td>
+<td>云机</td>
+<td>agent-device（L1a）</td>
+</tr>
+<tr>
+<td>ADBKeyBoard APK</td>
+<td>云机</td>
+<td><code>layers.input_text()</code>（中文输入）</td>
 </tr>
 </tbody>
 </table>
@@ -1727,6 +1797,121 @@ data: {&quot;layer&quot;:&quot;L1a&quot;,&quot;label&quot;:&quot;点「网络和
 <p>生成当前环境完整清单的命令：</p>
 <pre><code class="language-bash">uv pip list --python ~/.local/share/uv/tools/mobilerun/bin/python
 </code></pre>
+</section><section class="card"><h2>附录 D 同类项目摸底</h2>
+<blockquote>
+<p>数据取自 GitHub API，2026-10-28。星数为当日快照，会变。</p>
+</blockquote>
+<h3>D.1 同一个赛道：LLM 控制手机</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>星</th>
+<th>许可证</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>zai-org/Open-AutoGLM（智谱）</td>
+<td>26.5k</td>
+<td>Apache-2.0</td>
+<td>ADB 控制设备，视觉语言模型理解屏幕，规划并执行操作；内置敏感操作确认、登录或验证码时人工接管、远程 ADB（WiFi）调试</td>
+</tr>
+<tr>
+<td>droidrun/mobilerun</td>
+<td>9.9k</td>
+<td>MIT</td>
+<td>本项目的 L2 就是它：LLM 无关的手机 agent 框架</td>
+</tr>
+<tr>
+<td>X-PLUG/MobileAgent（阿里通义）</td>
+<td>9.3k</td>
+<td>MIT</td>
+<td>GUI-Owl 系列手机模型 + agent 家族</td>
+</tr>
+<tr>
+<td>IPADS-SAI/MobiAgent</td>
+<td>1.9k</td>
+<td>Apache-2.0</td>
+<td>模型（MobiMind）+ 加速框架 + benchmark，另有 App 形态</td>
+</tr>
+<tr>
+<td>Core-Mate/OpenGUI</td>
+<td>1.8k</td>
+<td>—</td>
+<td>Android GUI agent 框架</td>
+</tr>
+<tr>
+<td>ShawnPana/phone-harness</td>
+<td>4.0k</td>
+<td>MIT</td>
+<td>让你的 agent 控制你的手机</td>
+</tr>
+<tr>
+<td>omnimind-ai/OmniBot</td>
+<td>2.0k</td>
+<td>—</td>
+<td>手机端 AI agent</td>
+</tr>
+<tr>
+<td>instavm/clickclickclick</td>
+<td>716</td>
+<td>MIT</td>
+<td>任意 LLM 做 Android / 电脑操作</td>
+</tr>
+</tbody>
+</table>
+<h3>D.2 传统自动化（不用模型，靠控件树或脚本）</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>星</th>
+<th>许可证</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Genymobile/scrcpy</td>
+<td>153k</td>
+<td>Apache-2.0</td>
+<td>投屏与控制，很多项目的底层</td>
+</tr>
+<tr>
+<td>appium/appium</td>
+<td>22k</td>
+<td>Apache-2.0</td>
+<td>跨平台 E2E 自动化框架</td>
+</tr>
+<tr>
+<td>mobile-dev-inc/Maestro</td>
+<td>16k</td>
+<td>Apache-2.0</td>
+<td>声明式 YAML 的移动端 E2E</td>
+</tr>
+<tr>
+<td>AirtestProject/Airtest</td>
+<td>9.6k</td>
+<td>Apache-2.0</td>
+<td>图像识别 + 控件的 UI 自动化</td>
+</tr>
+<tr>
+<td>openatx/uiautomator2</td>
+<td>8.4k</td>
+<td>MIT</td>
+<td>Android 控件树 Python 封装，等同本项目 L1a 的同类方案</td>
+</tr>
+</tbody>
+</table>
+<h3>D.3 三个判断</h3>
+<ol>
+<li><strong>「AI 控制手机」已经是红海</strong>：上万星的同类项目有四五个，本项目做的不是新题目。</li>
+<li><strong>Open-AutoGLM 的架构与本项目高度重合</strong>：ADB 控制、视觉理解、规划执行，加上敏感操作确认、人工接管、远程 ADB。这几条本项目也做了，但对方已有 26.5k 星和现成的手机模型（AutoGLM-Phone）。</li>
+<li><strong>真正的差异只有一条</strong>：上述项目基本都是「单层视觉 agent」——截图、模型判断、动作，每一步都过模型。本项目多了 <strong>L0 确定性命令层</strong>：零模型调用、查询类 33–39 ms 出结论、装应用从 18 步压到 5 步。</li>
+</ol>
+<p>所以这个项目的定位不是「能控制手机」，而是：<strong>同样的任务，模型调用少一两个数量级；三个场景能闭环跑通</strong>。</p>
 </section><section class="card"><h2>版本变更历史</h2>
 <blockquote>
 <p>只记一句结论；改动细节、实测数据和踩过的坑，看 <code>docs/里程碑-2026-10-23.md</code> 对应小节。</p>
