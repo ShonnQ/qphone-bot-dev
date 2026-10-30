@@ -5,6 +5,9 @@
 用法：python3 docs/gen_design_html.py
 依赖：markdown（`python3 -m pip install --user markdown`）
 改完 md 之后跑一次即可；HTML 唔手改。
+
+主题：**ShonnQ Corp 默认视觉主题**（科技简约 · 暗底星空 · 薄荷青 #2ee6c9）
+     正本 CSS：~/目标/事业/设计稿/shonnq-theme.css —— 公司所有文档共用，只喺嗰边改。
 """
 
 import re
@@ -16,51 +19,68 @@ DOCS = Path(__file__).resolve().parent
 SRC = DOCS / "详细设计.md"
 OUT = DOCS / "详细设计.html"
 
-CSS = """
-:root{
-  --bg:#ffffff; --fg:#0f172a; --soft:#4d5b73; --line:rgba(15,23,42,.14);
-  --line2:rgba(15,23,42,.07); --code:#f6f8fc; --acc:#0369a1; --ok:#047857;
-}
-*{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{
-  margin:0; background:var(--bg); color:var(--fg);
-  font:15px/1.75 -apple-system,"SF Pro Text","PingFang SC","Hiragino Sans GB",system-ui,sans-serif;
-  padding:36px 44px 80px;
-}
+
+def _star_uri(n: int = 220, size: int = 800) -> str:
+    """同公司全景同一套星场参数：800×800 tile、220 粒、r .5–1.5、opacity .2–.95。"""
+    import random
+    import urllib.parse
+    rnd = random.Random(20261023)
+    radii = [0.5, 0.5, 0.6, 0.7, 0.9, 1.1, 1.5]
+    dots = []
+    for _ in range(n):
+        dots.append(
+            f'<circle cx="{rnd.uniform(0, size):.1f}" cy="{rnd.uniform(0, size):.1f}" '
+            f'r="{rnd.choice(radii)}" fill="#fff" opacity="{rnd.uniform(.2, .95):.2f}"/>'
+        )
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}">'
+           + "".join(dots) + "</svg>")
+    return "data:image/svg+xml," + urllib.parse.quote(svg, safe="")
+
+THEME_COMPANY = Path.home() / "目标" / "事业" / "设计稿" / "shonnq-theme.css"   # 公司正本
+THEME_VENDOR = DOCS / "theme" / "shonnq-theme.css"                        # 仓库副本（正本唔在时用）
+
+FALLBACK_CSS = """
+:root{color-scheme:dark;--bg:#05070a;--fg:#e8eef4;--soft:#8695a3;--line2:rgba(255,255,255,.055);
+  --acc:#2ee6c9;--acc-dim:rgba(46,230,201,.16);--code:#0a1015}
+body{margin:0;color:var(--fg);background:var(--bg);padding:0 44px 96px;
+  font:15px/1.78 -apple-system,"PingFang SC",system-ui,sans-serif}
 .wrap{max-width:1000px;margin:0 auto}
-h1{font-size:27px;line-height:1.35;margin:0 0 6px;letter-spacing:.2px}
-h1 + blockquote{margin-top:10px}
-h2{font-size:19px;margin:38px 0 14px;padding-bottom:7px;border-bottom:1px solid var(--line)}
-h3{font-size:16.5px;margin:28px 0 10px;color:var(--fg)}
-h4{font-size:14px;margin:22px 0 8px;color:var(--acc)}
-p{margin:9px 0}
-blockquote{margin:12px 0;padding:10px 14px;border-left:3px solid var(--acc);
-  background:var(--code);color:var(--soft);border-radius:0 8px 8px 0;font-size:13.5px}
-blockquote p{margin:3px 0}
-ul,ol{margin:9px 0 9px 22px;padding:0}
-li{margin:4px 0}
-code{font:.9em/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
-  background:var(--code);border:1px solid var(--line2);border-radius:5px;padding:1px 5px}
-pre{background:var(--code);border:1px solid var(--line2);border-radius:10px;
-  padding:12px 14px;overflow:auto}
-pre code{background:none;border:0;padding:0;font-size:12.6px;line-height:1.6}
-table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.4px}
-th,td{border:1px solid var(--line2);padding:7px 10px;text-align:left;vertical-align:top}
-th{background:var(--code);font-weight:700;white-space:nowrap}
-tbody tr:nth-child(even) td{background:#fcfdff}
-hr{border:0;border-top:1px solid var(--line);margin:34px 0}
-a{color:var(--acc)}
-strong{font-weight:700}
-.meta{font:11.5px/1 ui-monospace,Menlo,monospace;color:var(--soft);
-  display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 0}
-.meta span{background:var(--code);border:1px solid var(--line2);border-radius:999px;padding:4px 9px}
-.nowrap{white-space:nowrap}
-/* 架构总览：深色图卡，图内自带配色，唔跟亮色主题 */
-.archfig{background:#0b1220;border:1px solid rgba(15,23,42,.16);border-radius:16px;
-  padding:14px 12px;overflow-x:auto;margin:14px 0 18px}
-.archfig svg{display:block;max-width:100%;height:auto;margin:0 auto}
-"""
+h1{font-size:30px;text-align:center;margin:44px 0 0}
+"""  # 主题文件唔在时嘅兜底，保证唔会变返白底黑字
+
+
+def load_theme() -> str:
+    """读公司默认主题（正本 shonnq-theme.css），@STARS@ 换成星场 data-URI。"""
+    for cand in (THEME_COMPANY, THEME_VENDOR):
+        if cand.is_file():
+            css = cand.read_text(encoding="utf-8")
+            break
+    else:
+        css = FALLBACK_CSS
+        print("⚠️  未找到主题文件（公司正本 / 仓库副本），用兜底 CSS")
+    return css.replace("@STARS@", _star_uri())
+
+
+def _hero(body: str) -> str:
+    """首个 H1 + 其后 blockquote（版本/日期/依据）→ 居中头部。"""
+    m = re.match(r"\s*<h1>(.*?)</h1>\s*(?:<blockquote>(.*?)</blockquote>)?", body, re.S)
+    if not m:
+        return body
+    title, quote = m.group(1), m.group(2) or ""
+    chips = []
+    for p in re.findall(r"<p>(.*?)</p>", quote, re.S):
+        txt = p.strip()
+        if txt:
+            chips.append(f"<span>{txt}</span>")
+    meta = "\n  ".join(chips) if chips else ""
+    hero = (
+        '<header class="hero">\n'
+        '  <div class="kicker">ShonnQ Corp · 详细设计</div>\n'
+        f"  <h1>{title}</h1>\n"
+        + (f'  <div class="docmeta">{meta}</div>\n' if meta else "")
+        + "</header>\n"
+    )
+    return hero + body[m.end():]
 
 
 def main() -> int:
@@ -74,23 +94,31 @@ def main() -> int:
     )
     # 日期唔好断行（变更历史表最后一列）
     body = re.sub(r"(?<=>)20\d\d-\d\d-\d\d(?=<)", r'<span class="nowrap">\g<0></span>', body)
+    body = _hero(body)
 
-    # 标题去掉首个 H1（保留正文 h1 视觉），并把「> 版本」元信息做成 chip
+    # 每个一级标题（<h2>）一节 → 套公司全景式区域框
+    chunks = re.split(r"(?=<h2[ >])", body)
+    body = "".join(
+        f'<section class="card">{c}</section>' if c.lstrip().startswith("<h2") else c
+        for c in chunks
+    )
+
     html = f"""<!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hans">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QPhone 详细设计说明书 {ver}</title>
-<style>{CSS}</style>
+<title>QPhone Bot 详细设计 {ver}</title>
+<style>{load_theme()}</style>
 </head>
-<body><div class="wrap">
-<div class="meta"><span>QPhone Bot · 详细设计</span><span>版本 {ver}</span><span>渲染自 详细设计.md</span></div>
+<body>
+<div class="cosmos" aria-hidden="true"><div class="sun"></div><div class="beam"></div><div class="beam-core"></div></div>
+<div class="wrap">
 {body}
 </div></body></html>
 """
     OUT.write_text(html, encoding="utf-8")
-    print(f"写出 {OUT}  {len(html)} B  版本 {ver}")
+    print(f"写出 {OUT}  {len(html)} B  版本 {ver}  主题 {THEME_COMPANY.name}")
     return 0
 
 

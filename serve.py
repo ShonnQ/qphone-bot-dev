@@ -76,15 +76,38 @@ _ACT = {"in_think": False, "buf": []}
 _ACT_LOCK = threading.Lock()
 LAST_RESULT = {"ok": None, "msg": "", "ts": 0.0}
 
-# 执行层用量（每单用咗边层就 +1，会话级累计），result 事件带埋畀壳画占比
+# 执行层用量（每单用咗边层就 +1，累计写入 ~/.qphone/layer-stats.json，重启都唔清零）
 LAYER_STATS = {"L0": 0, "L1a": 0, "L1b": 0, "L2": 0}
 _LAYER_LOCK = threading.Lock()
+LAYER_FILE = os.path.expanduser("~/.qphone/layer-stats.json")
+
+
+def _load_layer_stats() -> None:
+    try:
+        if os.path.isfile(LAYER_FILE):
+            d = json.load(open(LAYER_FILE, encoding="utf-8"))
+            for k in LAYER_STATS:
+                LAYER_STATS[k] = int(d.get(k) or 0)
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
+def _save_layer_stats() -> None:
+    try:
+        os.makedirs(os.path.dirname(LAYER_FILE), exist_ok=True)
+        json.dump(LAYER_STATS, open(LAYER_FILE, "w", encoding="utf-8"), ensure_ascii=False)
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
+_load_layer_stats()
 
 
 def layer_bump(k: str):
     with _LAYER_LOCK:
         if k in LAYER_STATS:
             LAYER_STATS[k] += 1
+            _save_layer_stats()
         return dict(LAYER_STATS), sum(LAYER_STATS.values())   # 对话模式要知上一单做到未
 
 # ---- 会话历史（刷新 / 断线都唔会消失）----
@@ -276,8 +299,23 @@ TASK_WORDS = ("打开", "开一", "开启", "开下", "帮我开", "关掉", "�
               "暂停", "返回", "回桌面", "拨", "打电话", "复制", "粘贴", "删掉", "删除", "上传",
               # 记录 / 备忘 / 写入类（2026-10-23 补：呢类原来被判成 chat，直接推卸）
               "记入", "记低", "记落", "记录", "记住", "记事", "写低", "写落", "写字", "写入",
+              # 卸载 / 移除类动词（2026-10-27 补：讲「卸咗佢」「删走佢」原来判唔出系任务）
+              "卸", "卸载", "卸掉", "卸咗", "移除", "删走", "删咗", "打走",
               "存入", "存落", "存档", "加入", "新增", "新建", "建个", "开个", "备忘", "笔记",
               "填", "整", "搞", "帮我", "帮手", "同我", "麻烦你")
+# 确定性动作句（L0 自己就认得出，唔应该先掉去「唔清楚」再劳烦语义层/模型）
+TASK_PATTERNS = (
+    r"^(?:点|点击|tap)\s*[（(]?\s*\d{1,4}\s*[,，\s]\s*\d{1,4}",                  # 点 360,900
+    r"^(?:滑|滑动|swipe)\s*[（(]?\s*\d{1,4}\s*[,，\s]\s*\d{1,4}",                # 滑 200,700,200,300
+    r"^(?:输入|打|type)\s+[\x20-\x7e]{1,120}$",                                     # 输入 ASCII
+    r"^音量\s*(?:调大|大|加|调细|细|小|减|静音|\d+)$",
+    r"^(?:调|设|改|设成)?(?:屏幕)?亮度\s*(?:调到|调成|设成|改成|到)?\s*\d{1,3}$",
+    r"^(?:打开|开启|开|关闭|关掉|关)\s*(?:wifi|wi-fi|无线|蓝牙|飞行模式)$",
+    r"^(?:列包|列一下包)$", r"^(?:属性|getprop)\s+\S+$",
+    r"^(?:查前台|查一下前台|前台系咩)$", r"(?:截图|截屏|screenshot)",
+    r"^(?:打开|开|去)\s*https?://\S+$",
+)
+
 CHAT_WORDS = ("你好", "哈佬", "hello", "hi", "咩", "什么", "点解", "为什么", "分别", "有冇", "系咪",
               "边个", "几多", "多少", "你觉得", "解释", "讲讲", "介绍", "可以吗", "?", "？", "点样")
 
@@ -295,6 +333,9 @@ def classify(text: str) -> dict:
     chat = sum(1 for w in CHAT_WORDS if (w in low if w.isascii() else w in s))
     if not s:
         return {"mode": "chat", "why": "空", "task": 0, "chat": 0}
+    for pat in TASK_PATTERNS:                     # 确定性句唔使问模型
+        if re.match(pat, s, re.I):
+            return {"mode": "task", "why": f"确定性动作 {pat[:14]}", "task": 1, "chat": chat}
     if task and not chat:
         return {"mode": "task", "why": f"动作词 {task}", "task": task, "chat": chat}
     if chat and not task:
@@ -305,6 +346,86 @@ def classify(text: str) -> dict:
         return {"mode": "unclear", "why": "太短，唔知想点", "task": 0, "chat": 0}
     # 冇任何命中：唔可以用 chat 冒认（会变成「我唔会操作手机」式推卸），一律反问
     return {"mode": "unclear", "why": "冇识别到动作词", "task": 0, "chat": 0}
+
+
+QUERY_RE = re.compile(
+    r"(?:有无|有冇|有没有|是否)\s*(?:装|安装|安装咗|安)?\s*([^\s，。？！]{1,12})"
+    r"|([^\s，。？！]{1,12})\s*(?:装咗未|装左未|装咗没|装了吗|装咗冇|装咗未呀|有冇装)")
+
+
+def query_answer(text: str):
+    """查询类问题 → (name, pkg, 有冇)；答唔到返 None。结论一定要讲出口，唔可以只讲「完成」。"""
+    m = QUERY_RE.search(text or "")
+    if not m:
+        return None
+    raw = (m.group(1) or m.group(2) or "").strip()
+    name = layers._clean_app_name(raw)
+    if not name:
+        return None
+    # 「有无…」后面可能接住非 app 名词（兴趣、必要…）→ 冇 app 迹象就唔当成查询
+    if not re.search(r"(应用|程式|软件|app|装|安装)", text, re.I) and not layers.resolve_package(name):
+        return None
+    try:
+        pkg = layers.resolve_package(name)
+        inst = layers.installed()
+    except Exception:                                     # noqa: BLE001
+        return None
+    if pkg:
+        return (name, pkg, pkg in inst)
+    hits = [p for p in inst if name.lower() in p.lower()]
+    if hits:
+        return (name, hits[0], True)
+    return (name, "", False)
+
+
+def query_head(ans) -> str:
+    """(name, pkg, 有冇) → 一句结论。"""
+    name, pkg, has = ans
+    if has:
+        return f"有：{pkg}" + (f"（{name}）" if name and name.lower() not in pkg.lower() else "")
+    if pkg:
+        return f"冇：{pkg}"
+    return f"冇：包表揾唔到「{name}」"
+
+
+INSTALL_RE = re.compile(r"(?:下载|安装|装)\s*(?:一个|个)?\s*[^\s，。？！]{1,14}")
+SETTLE_JUNK = ("com.android.settings", "com.android.documentsui",
+               "com.android.permissioncontroller", "com.google.android.permissioncontroller")
+
+
+def settle_before_l2(text: str) -> str:
+    """L2 开工前归位：上一单残留在设置/文档/权限页会白烧几步去退出。
+
+    只收拾「垃圾状态」，唔动应用宝等真目标 App（L0 可能啱啱开定畀佢）。"""
+    if not INSTALL_RE.search(text):
+        return ""
+    fg = layers.fg_package()
+    if fg and any(fg.startswith(j) for j in SETTLE_JUNK):
+        layers.sh("input keyevent 3")
+        time.sleep(0.8)
+        return f"开工前归位（{fg} → 桌面）"
+    return ""
+
+
+def prep_l2_prompt(text: str) -> str:
+    """落 L2 之前塞环境事实：装应用唔使佢自己翻抽屉揾商店，更唔好查 Play。"""
+    if not INSTALL_RE.search(text):
+        return text
+    return text + "\n\n【环境·adb 已确认】" + layers.store_line() + " 装完弹通知/隐私权限就直接允许。"
+
+
+def post_task_touch(text: str) -> str:
+    """收尾：装完补通知授权、用前台包名核「打开」有冇真系开咗。"""
+    bits = []
+    name, pkg = layers.install_target(text)
+    if pkg and pkg in layers.installed(force=True):
+        layers.sh(f"pm grant {pkg} android.permission.POST_NOTIFICATIONS")
+        bits.append(f"已预授权通知 {pkg}")
+    if re.search(r"(打开|启动|进入)", text):
+        fg = layers.fg_package()
+        if fg:
+            bits.append(f"前台 {fg}")
+    return "；".join(bits)
 
 
 def chat_context() -> str:
@@ -387,7 +508,49 @@ def qphone_status() -> dict:
         return {"ok": False, "error": str(e)}
 
 
-def _exec_l2(q, prompt: str, steps: int, started: float):
+def _install_watcher(orig_text: str, proc, stop: dict, got: dict) -> None:
+    """装完即收尾：adb 每 2 秒查包表，装咗就开 App 并叫停模型。
+
+    模型唔知安装完成快手，会一路对住「Installing…」空等 5–6 步；
+    呢度用 adb 事实斩断，唔靠画面。"""
+    name, pkg = layers.install_target(orig_text)
+    if not pkg:
+        return
+    want_open = bool(re.search(r"(打开|启动|进入)", orig_text))
+    for _ in range(150):                                   # 最多 ~5 分钟
+        if stop.get("stop"):
+            return
+        try:
+            here = pkg in layers.installed(force=True)
+        except Exception:                                  # noqa: BLE001
+            here = False
+        if here:
+            time.sleep(1.2)
+            opened = False
+            if want_open:
+                for attempt in range(3):                   # 安装完成弹窗会顶住 am start，退一步再开
+                    try:
+                        layers.open_app(pkg)
+                        time.sleep(2.2)
+                        opened = layers.fg_package() == pkg
+                    except Exception:                      # noqa: BLE001
+                        opened = False
+                    if opened:
+                        break
+                    layers.sh("input keyevent 4")
+                    time.sleep(0.8)
+            layers.sh(f"pm grant {pkg} android.permission.POST_NOTIFICATIONS")
+            got.update(hit=True, pkg=pkg, opened=opened,
+                       msg=f"装完即收尾（adb 确认）：{pkg} 已安装" + ("并已打开" if opened else "，未确认打开"))
+            try:
+                proc.terminate()
+            except Exception:                              # noqa: BLE001
+                pass
+            return
+        time.sleep(2)
+
+
+def _exec_l2(q, prompt: str, steps: int, started: float, orig_text: str = ""):
     """跑一次 Mobilerun，返 (success, message, traj_dir, 用咗几步)。"""
     provider, base, key = llm_route()
     cmd = [
@@ -406,6 +569,9 @@ def _exec_l2(q, prompt: str, steps: int, started: float):
     env["OPENAI_API_KEY"] = key
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, bufsize=1, env=env)
+    stop, got = {"stop": False}, {}
+    if orig_text and INSTALL_RE.search(orig_text):
+        threading.Thread(target=_install_watcher, args=(orig_text, proc, stop, got), daemon=True).start()
     success, message, collecting, traj_dir, maxstep = False, "", False, "", 0
     assert proc.stdout is not None
     for line in proc.stdout:
@@ -452,6 +618,10 @@ def _exec_l2(q, prompt: str, steps: int, started: float):
         if tp.is_dir():
             TRAJ_DIRS[tp.name] = tp
             tid = tp.name
+    stop["stop"] = True
+    if got.get("hit") and not success:
+        success = True
+        message = got.get("msg") or message        # 收尾由 adb 讲，唔靠模型自述
     if not tid:
         tid = latest_trajectory(started)
     if tid:
@@ -482,8 +652,12 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
         hist_task_update(CURRENT_TASK["id"], phase="done" if ok else "human", msg=detail[:300])
         _pub(q, "done" if ok else "human", action="")
         st, tot = layer_bump(tr["layer"])
-        q.put(("result", {"success": ok,
-                          "message": f"{tr['label']}（{tr['layer']}，{tr['ms']} ms）" if ok else detail,
+        ans = query_answer(text)
+        if ans:
+            msg = query_head(ans) + f"（{tr['layer']} {tr['ms']} ms）"
+        else:
+            msg = f"{tr['label']}（{tr['layer']}，{tr['ms']} ms）" if ok else detail
+        q.put(("result", {"success": ok, "message": msg, "answer": bool(ans),
                           "layer_stats": st, "layer_total": tot}))
         q.put(("_end", {}))          # L0/L1 已直接落到目标态，唔按 home 复位
         return
@@ -497,8 +671,11 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
     lstats, ltot = layer_bump("L2")
     CURRENT_TASK["layer"] = "L2"
     RUN.update(text=text, used=0, of=int(STEPS), round=0, active=True, note="")
+    settle_note = settle_before_l2(text)
+    if settle_note:
+        q.put(("progress", {"line": settle_note}))
     try:
-        success, message, tid, used = _exec_l2(q, text, int(STEPS), started)
+        success, message, tid, used = _exec_l2(q, prep_l2_prompt(text), int(STEPS), started, text)
         RUN["used"] = used
         LAST_RESULT.update(ok=bool(success), msg=message or "", ts=time.time())
         hist_task_update(CURRENT_TASK["id"], phase="done" if success else "human",
@@ -506,7 +683,11 @@ def run_agent(text: str, q: "queue.Queue[tuple[str, dict]]") -> None:
         if success:
             RUN["active"] = False
             _pub(q, "done", action="")
-            q.put(("result", {"success": True, "message": message or "做完",
+            ans = query_answer(text)
+            touch = post_task_touch(text)
+            base = "；".join(x for x in (ans and query_head(ans), message or "做完", touch) if x)
+            msg = base
+            q.put(("result", {"success": True, "message": msg, "answer": bool(ans),
                               "layer_stats": lstats, "layer_total": ltot}))
         else:
             # 分类收尾：A 类（登录/验证码/付款）弹接管卡，B 类（技术失败）唔弹人
@@ -580,7 +761,9 @@ def emit_fail(q, message: str, tid: str, lstats=None, ltot: int = 0) -> None:
         RUN["active"] = False
         _pub(q, "human", action="")
         q.put(("needs_human", {"reason": message or "未做到", "hand_scope": "none"}))
-        q.put(("result", {"success": False, "message": message or "未做到",
+        ans = query_answer(RUN.get("text") or "")
+        msg = (query_head(ans) + "；" + (message or "未做到")) if ans else (message or "未做到")
+        q.put(("result", {"success": False, "message": msg, "answer": bool(ans),
                           "layer_stats": lstats, "layer_total": ltot}))
 
 
@@ -773,6 +956,20 @@ def _flat_ui(d: Path, k: int) -> dict:
     return out
 
 
+_SCREEN: tuple[int, int] | None = None
+
+
+def screen_wh() -> tuple[int, int]:
+    """当前云机屏幕尺寸（缓存）。换机/换镜像后尺寸不同，不能写死。"""
+    global _SCREEN
+    if _SCREEN is None:
+        try:
+            _SCREEN = layers.screen_size()
+        except Exception:
+            _SCREEN = (720, 1280)
+    return _SCREEN
+
+
 def _bounds_box(b: str) -> tuple[float, float, float, float] | None:
     try:
         x1, y1, x2, y2 = [float(v) for v in b.split(",")]
@@ -780,7 +977,8 @@ def _bounds_box(b: str) -> tuple[float, float, float, float] | None:
         return None
     if x2 <= x1 or y2 <= y1:
         return None
-    return x1 / 720 * 100, y1 / 1600 * 100, (x2 - x1) / 720 * 100, (y2 - y1) / 1600 * 100
+    W, H = screen_wh()
+    return x1 / W * 100, y1 / H * 100, (x2 - x1) / W * 100, (y2 - y1) / H * 100
 
 
 def _label(el: dict) -> str:
@@ -988,7 +1186,7 @@ def _encoder_loop():
         t0 = time.time()
         proc = subprocess.Popen(
             [ADB, "-s", TARGET, "shell", "screenrecord",
-             "--output-format=h264", "--size", "720x1280",
+             "--output-format=h264", "--size", f"{screen_wh()[0]}x{screen_wh()[1]}",
              "--bit-rate", "6000000", "--time-limit", "180", "-"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
         STREAM["proc"] = proc
@@ -1320,17 +1518,27 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
         if path == "/state":
-            return self._send_json(dict(STATE))
+            d = dict(STATE)
+            d["layer_stats"] = dict(LAYER_STATS)
+            d["layer_total"] = sum(LAYER_STATS.values())
+            return self._send_json(d)
         if path == "/history":
             with HIST_LOCK:
                 items = [dict(x) for x in HISTORY]
-            return self._send_json({"items": items, "state": dict(STATE),
+            st = dict(STATE)
+            st["layer_stats"] = dict(LAYER_STATS)
+            st["layer_total"] = sum(LAYER_STATS.values())
+            return self._send_json({"items": items, "state": st,
                                     "model": MODEL, "of": int(STEPS)})
         if path == "/health":
             return self._send_json({"ok": True, "target": TARGET, "model": MODEL, "provider": PROVIDER})
         if path == "/layers":
             d = dict(LAYERS_DOC)
             d["last_attempts"] = getattr(layers, "LAST_ATTEMPTS", [])
+            try:
+                d["semantic"] = layers.semantic_status()
+            except Exception as e:                         # noqa: BLE001
+                d["semantic"] = {"enabled": False, "error": str(e)[:120]}
             try:
                 d["webview_sockets"] = layers.webview_sockets()
             except Exception:                              # noqa: BLE001
@@ -1464,6 +1672,15 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         # ── 判唔清：反问，等用户拣 ──
+        # ── 判唔清：先用 S 层语义判一次（讲法未有动作词，但语义明显系任务，就照跑）──
+        if verdict["mode"] == "unclear" and mode == "auto":
+            try:
+                p = layers.sem_parse(text)
+            except Exception:                                  # noqa: BLE001
+                p = None
+            if p and p.get("intent") not in (None, "unknown") and (p.get("confidence") or 0) >= layers.SEM_MIN_CONF:
+                verdict = {"mode": "task", "why": f"语义判定 {p.get('intent')}"}
+                emit("intent", {"mode": "task", "why": verdict["why"], "text": text})
         if verdict["mode"] == "unclear":
             _pub(None, "idle")
             hist_add("chat", text="想我帮你做，定系问下？", options=["当任务跑", "就系问下"])
